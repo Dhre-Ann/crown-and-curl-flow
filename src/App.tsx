@@ -3,24 +3,62 @@ import { BrowserRouter, Route, Routes } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import Index from "./pages/Index.tsx";
-import NotFound from "./pages/NotFound.tsx";
+import { AuthProvider } from "@/context/AuthContext";
+import Navbar from "@/components/layout/Navbar";
+import Footer from "@/components/layout/Footer";
+import AdminLayout from "@/components/layout/AdminLayout";
+
+import Landing from "@/pages/public/Landing";
+import Services from "@/pages/public/Services";
+import ServiceDetail from "@/pages/public/ServiceDetail";
+import Book from "@/pages/public/Book";
+import Checkout from "@/pages/public/Checkout";
+import Login from "@/pages/public/Login";
+import CustomerDashboard from "@/pages/customer/Dashboard";
+import NewReview from "@/pages/customer/NewReview";
+import AdminDashboard from "@/pages/admin/AdminDashboard";
+import AdminServicesPage from "@/pages/admin/AdminServicesPage";
+import AdminCalendar from "@/pages/admin/AdminCalendar";
+import AdminReviews from "@/pages/admin/AdminReviews";
+import AdminSettings from "@/pages/admin/AdminSettings";
+import NotFound from "@/pages/NotFound";
 
 const queryClient = new QueryClient();
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
-      <Toaster />
-      <Sonner />
-      <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<Index />} />
-          {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-          <Route path="*" element={<NotFound />} />
-        </Routes>
-      </BrowserRouter>
-    </TooltipProvider>
+    <AuthProvider>
+      <TooltipProvider>
+        <Toaster />
+        <Sonner />
+        <BrowserRouter>
+          <div className="flex flex-col min-h-screen">
+            <Navbar />
+            <main className="flex-1">
+              <Routes>
+                <Route path="/" element={<Landing />} />
+                <Route path="/services" element={<Services />} />
+                <Route path="/services/:id" element={<ServiceDetail />} />
+                <Route path="/book" element={<Book />} />
+                <Route path="/checkout" element={<Checkout />} />
+                <Route path="/login" element={<Login />} />
+                <Route path="/customer/dashboard" element={<CustomerDashboard />} />
+                <Route path="/customer/reviews/new" element={<NewReview />} />
+                <Route path="/admin" element={<AdminLayout />}>
+                  <Route index element={<AdminDashboard />} />
+                  <Route path="services" element={<AdminServicesPage />} />
+                  <Route path="calendar" element={<AdminCalendar />} />
+                  <Route path="reviews" element={<AdminReviews />} />
+                  <Route path="settings" element={<AdminSettings />} />
+                </Route>
+                <Route path="*" element={<NotFound />} />
+              </Routes>
+            </main>
+            <Footer />
+          </div>
+        </BrowserRouter>
+      </TooltipProvider>
+    </AuthProvider>
   </QueryClientProvider>
 );
 
