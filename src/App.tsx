@@ -27,6 +27,9 @@ import NotFound from "@/pages/NotFound";
 
 const queryClient = new QueryClient();
 
+const routerBasename =
+  import.meta.env.BASE_URL.replace(/\/$/, "") || undefined;
+
 function CustomerRoute({ children }: { children: JSX.Element }) {
   const { user, loading } = useAuth();
   if (loading) return null;
@@ -41,7 +44,7 @@ const App = () => (
       <TooltipProvider>
         <Toaster />
         <Sonner />
-        <BrowserRouter>
+        <BrowserRouter basename={routerBasename}>
           <div className="flex flex-col min-h-screen">
             <Navbar />
             <main className="flex-1">

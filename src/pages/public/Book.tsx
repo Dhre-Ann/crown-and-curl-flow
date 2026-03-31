@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { useSearchParams, useNavigate } from "react-router-dom";
+import { Link, useSearchParams, useNavigate } from "react-router-dom";
 import { mockStyles } from "@/data/mockStyles";
 import { ChevronLeft, ChevronRight, Clock } from "lucide-react";
 
@@ -158,7 +158,7 @@ export default function Book() {
                   </button>
                 </>
               ) : (
-                <p className="text-muted-foreground text-sm">No style selected. <a href="/services" className="text-accent underline">Browse styles</a></p>
+                <p className="text-muted-foreground text-sm">No style selected. <Link to="/services" className="text-accent underline">Browse styles</Link></p>
               )}
             </div>
           </div>
