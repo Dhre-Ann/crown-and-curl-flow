@@ -2,6 +2,9 @@
 # Repo → Settings → Pages → Build and deployment → Source: GitHub Actions
 name: Deploy GitHub Pages
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 on:
   push:
     branches: [main]
@@ -20,20 +23,19 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: "22"
           cache: npm
       - run: npm ci
-      # Without this secret, Vite embeds http://localhost:5000 — browsers on GitHub Pages will never reach your PC.
-      - name: Require VITE_API_BASE_URL secret
+      # Without VITE_API_BASE_URL, the bundle uses localhost — login/API only works after you add the secret and redeploy.
+      - name: Check VITE_API_BASE_URL secret
         env:
           VITE_API_BASE_URL: ${{ secrets.VITE_API_BASE_URL }}
         run: |
           if [ -z "$VITE_API_BASE_URL" ]; then
-            echo "::error::Set repository secret VITE_API_BASE_URL to your public HTTPS API (e.g. https://your-api.onrender.com, no trailing slash). Then re-run the workflow. Also set CORS_ORIGINS on the API to include https://dhre-ann.github.io"
-            exit 1
+            echo "::warning::VITE_API_BASE_URL is not set. The site will call http://localhost:5000 (API will not work on GitHub Pages). Add the repository secret with your HTTPS API base URL and set CORS_ORIGINS on the API to https://dhre-ann.github.io"
           fi
       - name: Build static site
         env:
