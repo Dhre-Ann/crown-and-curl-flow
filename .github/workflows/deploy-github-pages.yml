@@ -26,7 +26,15 @@ jobs:
           node-version: "22"
           cache: npm
       - run: npm ci
-      # Set repo secret VITE_API_BASE_URL to your deployed API (https only), e.g. https://api.example.com
+      # Without this secret, Vite embeds http://localhost:5000 — browsers on GitHub Pages will never reach your PC.
+      - name: Require VITE_API_BASE_URL secret
+        env:
+          VITE_API_BASE_URL: ${{ secrets.VITE_API_BASE_URL }}
+        run: |
+          if [ -z "$VITE_API_BASE_URL" ]; then
+            echo "::error::Set repository secret VITE_API_BASE_URL to your public HTTPS API (e.g. https://your-api.onrender.com, no trailing slash). Then re-run the workflow. Also set CORS_ORIGINS on the API to include https://dhre-ann.github.io"
+            exit 1
+          fi
       - name: Build static site
         env:
           VITE_API_BASE_URL: ${{ secrets.VITE_API_BASE_URL }}
