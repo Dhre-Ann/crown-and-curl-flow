@@ -4,13 +4,15 @@ import { Menu, X, LogOut, User } from "lucide-react";
 import { useState } from "react";
 
 export default function Navbar() {
-  const { user, logout, isLoggedIn, isAdmin } = useAuth();
+  const { user, logout } = useAuth();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
+  const isLoggedIn = Boolean(user);
+  const isAdmin = user?.role === "shop_admin" || user?.role === "super_admin";
 
   const handleLogout = () => {
     logout();
-    navigate("/");
+    navigate("/login");
   };
 
   return (

@@ -1,59 +1,113 @@
-import { createContext, useContext, useState, useEffect, ReactNode } from "react";
+import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import {
+  clearToken,
+  getToken,
+  loginRequest,
+  meRequest,
+  registerCustomerRequest,
+  registerShopRequest,
+  setToken,
+  type ApiShop,
+  type ApiUser,
+} from "@/lib/api";
 
-type Role = "customer" | "admin" | null;
-
-interface User {
+interface LoginPayload {
   email: string;
+  password: string;
+}
+
+interface RegisterCustomerPayload {
   name: string;
-  role: Role;
+  email: string;
+  password: string;
+  shopSlug?: string;
+}
+
+interface RegisterShopPayload {
+  name: string;
+  email: string;
+  password: string;
+  shopName: string;
+  shopSlug: string;
 }
 
 interface AuthContextType {
-  user: User | null;
-  login: (email: string, password: string) => boolean;
+  user: ApiUser | null;
+  shop: ApiShop | null;
+  login: (payload: LoginPayload) => Promise<{ user: ApiUser; shop: ApiShop | null }>;
+  registerCustomer: (payload: RegisterCustomerPayload) => Promise<{ user: ApiUser }>;
+  registerShop: (payload: RegisterShopPayload) => Promise<{ user: ApiUser; shop: ApiShop }>;
   logout: () => void;
-  isAdmin: boolean;
-  isLoggedIn: boolean;
+  loading: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-const MOCK_USERS: Record<string, { password: string; name: string; role: Role }> = {
-  "customer@demo.com": { password: "password", name: "Nia Johnson", role: "customer" },
-  "admin@demo.com": { password: "password", name: "Crown Studio", role: "admin" },
-};
-
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<ApiUser | null>(null);
+  const [shop, setShop] = useState<ApiShop | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const stored = localStorage.getItem("braider_auth");
-    if (stored) {
-      try { setUser(JSON.parse(stored)); } catch { /* ignore */ }
-    }
+    const bootstrap = async () => {
+      const token = getToken();
+      if (!token) {
+        setLoading(false);
+        return;
+      }
+
+      try {
+        const me = await meRequest();
+        setUser(me.user);
+        setShop(me.shop ?? null);
+      } catch {
+        clearToken();
+        setUser(null);
+        setShop(null);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    void bootstrap();
   }, []);
 
-  const login = (email: string, password: string): boolean => {
-    const mock = MOCK_USERS[email];
-    if (mock && mock.password === password) {
-      const u = { email, name: mock.name, role: mock.role };
-      setUser(u);
-      localStorage.setItem("braider_auth", JSON.stringify(u));
-      return true;
-    }
-    return false;
+  const login = async (payload: LoginPayload) => {
+    const response = await loginRequest(payload);
+    setToken(response.token);
+    setUser(response.user);
+    setShop(response.shop ?? null);
+    return { user: response.user, shop: response.shop ?? null };
+  };
+
+  const registerCustomer = async (payload: RegisterCustomerPayload) => {
+    const response = await registerCustomerRequest(payload);
+    setToken(response.token);
+    setUser(response.user);
+    setShop(null);
+    return { user: response.user };
+  };
+
+  const registerShop = async (payload: RegisterShopPayload) => {
+    const response = await registerShopRequest(payload);
+    setToken(response.token);
+    setUser(response.user);
+    setShop(response.shop);
+    return { user: response.user, shop: response.shop };
   };
 
   const logout = () => {
+    clearToken();
     setUser(null);
-    localStorage.removeItem("braider_auth");
+    setShop(null);
   };
 
-  return (
-    <AuthContext.Provider value={{ user, login, logout, isAdmin: user?.role === "admin", isLoggedIn: !!user }}>
-      {children}
-    </AuthContext.Provider>
+  const value = useMemo(
+    () => ({ user, shop, login, registerCustomer, registerShop, logout, loading }),
+    [user, shop, loading]
   );
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
 export function useAuth() {

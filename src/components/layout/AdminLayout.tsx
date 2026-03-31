@@ -13,10 +13,13 @@ const mobileLinks = [
 ];
 
 export default function AdminLayout() {
-  const { isAdmin, isLoggedIn } = useAuth();
+  const { user, loading, shop } = useAuth();
   const { pathname } = useLocation();
+  const isAdmin = user?.role === "shop_admin" || user?.role === "super_admin";
+  const isShopAdminInCurrentShop = user?.role !== "shop_admin" || user.shopId === shop?.id;
 
-  if (!isLoggedIn) return <Navigate to="/login" replace />;
+  if (loading) return null;
+  if (!user) return <Navigate to="/login" replace />;
   if (!isAdmin) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] text-center px-4">
@@ -26,6 +29,7 @@ export default function AdminLayout() {
       </div>
     );
   }
+  if (!isShopAdminInCurrentShop) return <Navigate to="/login" replace />;
 
   return (
     <div className="flex min-h-[calc(100vh-4rem)]">

@@ -1,0 +1,177 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// --- SHOPS ---
+model Shop {
+  id                   String        @id @default(uuid())
+  name                 String
+  slug                 String        @unique // e.g. "kairstyles" -> kairstyles.crownstudio.com
+  description          String?
+  subscriptionStatus   String        @default("trial") // trial, active, inactive
+  subscriptionEndsAt   DateTime?
+  createdAt            DateTime      @default(now())
+
+  owner        User?  @relation("ShopOwner", fields: [ownerId], references: [id])
+  ownerId      String? @unique
+
+  users              User[]  @relation("ShopMembers")
+  styles             Style[]
+  appointments       Appointment[]
+  reviews            Review[]
+  blockedDates       BlockedDate[]
+  workHours          WorkHour[]
+}
+
+// --- USERS ---
+model User {
+  id        String   @id @default(uuid())
+  name      String
+  email     String   @unique
+  password  String
+  role      String   @default("customer") // customer, shop_admin, super_admin
+  createdAt DateTime @default(now())
+
+  ownedShop Shop? @relation("ShopOwner")
+  shop      Shop? @relation("ShopMembers", fields: [shopId], references: [id])
+  shopId    String?
+
+  appointments Appointment[]
+  reviews      Review[]
+}
+
+// --- STYLES ---
+model Style {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  basePrice   Decimal  @db.Decimal(10, 2)
+  durationMin Int
+  durationMax Int
+  isAvailable Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  shop        Shop     @relation(fields: [shopId], references: [id])
+  shopId      String
+
+  images               StyleImage[]
+  customizationOptions CustomizationOption[]
+  appointments         Appointment[]
+  reviews              Review[]
+}
+
+model StyleImage {
+  id           String  @id @default(uuid())
+  imageUrl     String
+  displayOrder Int     @default(0)
+
+  style   Style @relation(fields: [styleId], references: [id], onDelete: Cascade)
+  styleId String
+}
+
+model CustomizationOption {
+  id            String   @id @default(uuid())
+  optionType    String // 'size', 'length', 'color'
+  name          String
+  priceModifier Decimal @db.Decimal(10, 2) @default(0)
+
+  style   Style @relation(fields: [styleId], references: [id], onDelete: Cascade)
+  styleId String
+}
+
+// --- APPOINTMENTS ---
+model Appointment {
+  id              String    @id @default(uuid())
+  date            DateTime  @db.Date
+  time            String
+  selectedOptions Json      // snapshot of chosen customization options at time of booking
+  totalPrice      Decimal   @db.Decimal(10, 2)
+  depositAmount   Decimal   @db.Decimal(10, 2)
+  status          String    @default("pending") // pending, approved, cancelled, completed
+  stripePaymentIntentId String?
+  createdAt       DateTime  @default(now())
+
+  user   User   @relation(fields: [userId], references: [id])
+  userId String
+
+  style   Style @relation(fields: [styleId], references: [id])
+  styleId String
+
+  shop   Shop   @relation(fields: [shopId], references: [id])
+  shopId String
+
+  review Review?
+}
+
+// --- AVAILABILITY ---
+model BlockedDate {
+  id      String   @id @default(uuid())
+  date    DateTime @db.Date @unique
+  reason  String?
+
+  shop   Shop   @relation(fields: [shopId], references: [id])
+  shopId String
+}
+
+model WorkHour {
+  id         String  @id @default(uuid())
+  dayOfWeek  Int     // 0=Sun, 1=Mon, 2=Tue ... 6=Sat
+  startTime  String
+  endTime    String
+  isActive   Boolean @default(true)
+
+  shop   Shop   @relation(fields: [shopId], references: [id])
+  shopId String
+}
+
+// --- REVIEWS ---
+model Review {
+  id        String  @id @default(uuid())
+  rating    Int
+  comment   String?
+  status    String  @default("pending") // pending, approved, featured
+  createdAt DateTime @default(now())
+
+  user   User   @relation(fields: [userId], references: [id])
+  userId String
+
+  style   Style @relation(fields: [styleId], references: [id])
+  styleId String
+
+  shop   Shop   @relation(fields: [shopId], references: [id])
+  shopId String
+
+  appointment   Appointment @relation(fields: [appointmentId], references: [id])
+  appointmentId String      @unique
+
+  images ReviewImage[]
+}
+
+model ReviewImage {
+  id           String  @id @default(uuid())
+  imageUrl     String
+  displayOrder Int     @default(0)
+
+  review   Review @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+  reviewId String
+}
+
+// --- SUBSCRIPTIONS (future placeholder) ---
+model Subscription {
+  id              String    @id @default(uuid())
+  shopId          String    @unique
+  stripeCustomerId String?
+  stripePriceId   String?
+  status          String    @default("trial") // trial, active, past_due, cancelled
+  currentPeriodEnd DateTime?
+  createdAt       DateTime  @default(now())
+}

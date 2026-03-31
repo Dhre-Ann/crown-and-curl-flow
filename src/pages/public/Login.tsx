@@ -1,22 +1,32 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 
 export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
   const { login } = useAuth();
   const navigate = useNavigate();
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const success = login(email, password);
-    if (success) {
-      if (email === "admin@demo.com") navigate("/admin");
-      else navigate("/customer/dashboard");
-    } else {
-      setError("Invalid email or password. Try customer@demo.com or admin@demo.com with password 'password'.");
+    setError("");
+    setSubmitting(true);
+
+    try {
+      const result = await login({ email, password });
+      if (result.user.role === "shop_admin" || result.user.role === "super_admin") {
+        navigate("/admin");
+      } else {
+        navigate("/customer/dashboard");
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Invalid email or password.";
+      setError(message);
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -45,11 +55,16 @@ export default function Login() {
               placeholder="password"
             />
           </div>
-          <button type="submit" className="btn-gold w-full text-center">Sign In</button>
+          <button type="submit" className="btn-gold w-full text-center" disabled={submitting}>
+            {submitting ? "Signing In..." : "Sign In"}
+          </button>
           <div className="text-xs text-muted-foreground text-center space-y-1 pt-2">
-            <p><strong>Demo accounts:</strong></p>
-            <p>customer@demo.com / password</p>
-            <p>admin@demo.com / password</p>
+            <p>
+              No account yet?{" "}
+              <Link to="/register" className="text-accent underline">
+                Register
+              </Link>
+            </p>
           </div>
         </form>
       </div>
