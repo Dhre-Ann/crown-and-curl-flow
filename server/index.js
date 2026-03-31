@@ -3,27 +3,40 @@ require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 const authRoutes = require("./routes/auth");
+const stylesRoutes = require("./routes/styles");
 
 const app = express();
 
-const defaultOrigins = ["http://localhost:3000", "http://localhost:8080"];
+const defaultOrigins = [
+  "http://localhost:3000",
+  "http://localhost:8080",
+  "http://127.0.0.1:3000",
+  "http://127.0.0.1:8080",
+  "http://[::1]:3000",
+  "http://[::1]:8080",
+];
 const extraOrigins = process.env.CORS_ORIGINS
   ? process.env.CORS_ORIGINS.split(",").map((o) => o.trim()).filter(Boolean)
   : [];
 const allowedOrigins = [...defaultOrigins, ...extraOrigins];
-app.use(cors({ origin: allowedOrigins }));
+app.use(
+  cors({
+    origin: allowedOrigins,
+    // Explicit list so preflight never omits custom headers (some clients are strict about reflection).
+    allowedHeaders: ["Content-Type", "Authorization", "x-shop-slug"],
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  })
+);
 app.use(express.json());
 
-// Health check (only API route implemented in Phase 0).
 app.get("/api/health", (req, res) => {
   res.status(200).json({ success: true, message: "Crown Studio API is running" });
 });
 
-// Auth routes
 app.use("/api/auth", authRoutes);
+app.use("/api/styles", stylesRoutes);
 
-// Placeholder route groups (no routes implemented in Phase 0).
-// Styles routes
+// Placeholder route groups (future phases).
 // Appointments routes
 // Payments routes
 // Reviews routes

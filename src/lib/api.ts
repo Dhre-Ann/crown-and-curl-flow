@@ -1,3 +1,5 @@
+import type { CatalogStyle, StyleCustomizationOption } from "@/types/style";
+
 const envApi = import.meta.env.VITE_API_BASE_URL;
 const API_BASE_URL =
   typeof envApi === "string" && envApi.trim() !== ""
@@ -81,7 +83,10 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
 
   const payload = (await response.json()) as ApiResponse<T>;
   if (!response.ok || !payload.success) {
-    throw new Error(payload.success ? "Request failed" : payload.error);
+    if (payload.success === false) {
+      throw new Error(payload.error);
+    }
+    throw new Error("Request failed");
   }
 
   return payload.data;
@@ -123,4 +128,86 @@ export async function meRequest() {
   return request<{ user: ApiUser; shop: ApiShop | null }>("/api/auth/me", {
     auth: true,
   });
+}
+
+export async function fetchStylesCatalog(opts?: { auth?: boolean }): Promise<CatalogStyle[]> {
+  const data = await request<{ styles: CatalogStyle[] }>("/api/styles", {
+    auth: opts?.auth ?? false,
+  });
+  return data.styles;
+}
+
+export async function fetchStyleById(id: string): Promise<CatalogStyle> {
+  const data = await request<{ style: CatalogStyle }>(`/api/styles/${id}`);
+  return data.style;
+}
+
+export async function createStyleRequest(payload: {
+  name: string;
+  description?: string | null;
+  basePrice: number;
+  durationMin: number;
+  durationMax: number;
+}): Promise<CatalogStyle> {
+  const data = await request<{ style: CatalogStyle }>("/api/styles", {
+    method: "POST",
+    body: payload,
+    auth: true,
+  });
+  return data.style;
+}
+
+export async function updateStyleRequest(
+  id: string,
+  payload: {
+    name: string;
+    description?: string | null;
+    basePrice: number;
+    durationMin: number;
+    durationMax: number;
+  }
+): Promise<CatalogStyle> {
+  const data = await request<{ style: CatalogStyle }>(`/api/styles/${id}`, {
+    method: "PUT",
+    body: payload,
+    auth: true,
+  });
+  return data.style;
+}
+
+export async function deleteStyleRequest(id: string): Promise<void> {
+  await request<{ deleted: boolean }>(`/api/styles/${id}`, {
+    method: "DELETE",
+    auth: true,
+  });
+}
+
+export async function toggleStyleRequest(id: string): Promise<CatalogStyle> {
+  const data = await request<{ style: CatalogStyle }>(`/api/styles/${id}/toggle`, {
+    method: "PATCH",
+    auth: true,
+  });
+  return data.style;
+}
+
+export async function addStyleOptionRequest(
+  styleId: string,
+  payload: { optionType: string; name: string; priceModifier: number }
+): Promise<{ option: StyleCustomizationOption; style: CatalogStyle }> {
+  return request<{ option: StyleCustomizationOption; style: CatalogStyle }>(
+    `/api/styles/${styleId}/options`,
+    {
+      method: "POST",
+      body: payload,
+      auth: true,
+    }
+  );
+}
+
+export async function removeStyleOptionRequest(styleId: string, optionId: string): Promise<CatalogStyle> {
+  const data = await request<{ style: CatalogStyle }>(`/api/styles/${styleId}/options/${optionId}`, {
+    method: "DELETE",
+    auth: true,
+  });
+  return data.style;
 }

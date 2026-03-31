@@ -1,23 +1,85 @@
+import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { mockStyles } from "@/data/mockStyles";
+import { fetchStyleById } from "@/lib/api";
+import type { CatalogStyle } from "@/types/style";
 import { usePriceCalculator } from "@/hooks/usePriceCalculator";
+import { formatStyleDuration, stylePrimaryImageUrl } from "@/lib/styleDisplay";
 import { Clock, Check } from "lucide-react";
 
 export default function ServiceDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const style = mockStyles.find(s => s.id === id);
+  const [style, setStyle] = useState<CatalogStyle | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  if (!style) {
+  useEffect(() => {
+    if (!id) {
+      setStyle(null);
+      setLoading(false);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        const row = await fetchStyleById(id);
+        if (!cancelled) setStyle(row);
+      } catch (e) {
+        if (!cancelled) {
+          setStyle(null);
+          setError(e instanceof Error ? e.message : "Style not found");
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [id]);
+
+  if (loading) {
     return (
-      <div className="section-padding text-center">
-        <h1 className="heading-display text-3xl font-bold mb-4">Style Not Found</h1>
-        <button onClick={() => navigate("/services")} className="btn-gold">Browse Styles</button>
+      <div className="section-padding">
+        <div className="container mx-auto text-center text-muted-foreground">Loading…</div>
       </div>
     );
   }
 
-  const { partSize, setPartSize, length, setLength, color, setColor, totalPrice } = usePriceCalculator(style);
+  if (!style || error) {
+    return (
+      <div className="section-padding text-center">
+        <h1 className="heading-display text-3xl font-bold mb-4">Style Not Found</h1>
+        <button type="button" onClick={() => navigate("/services")} className="btn-gold">
+          Browse Styles
+        </button>
+      </div>
+    );
+  }
+
+  return <ServiceDetailLoaded style={style} navigate={navigate} />;
+}
+
+function ServiceDetailLoaded({
+  style,
+  navigate,
+}: {
+  style: CatalogStyle;
+  navigate: ReturnType<typeof useNavigate>;
+}) {
+  const {
+    types,
+    grouped,
+    humanizeOptionType,
+    selectedIdByType,
+    setSelectedForType,
+    totalPrice,
+    partSize,
+    length,
+    color,
+  } = usePriceCalculator(style);
 
   const handleProceed = () => {
     const params = new URLSearchParams({
@@ -25,7 +87,7 @@ export default function ServiceDetail() {
       partSize,
       length,
       color,
-      total: totalPrice.toString(),
+      total: String(Math.round(totalPrice * 100) / 100),
     });
     navigate(`/book?${params.toString()}`);
   };
@@ -34,111 +96,108 @@ export default function ServiceDetail() {
     <div className="section-padding">
       <div className="container mx-auto">
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 lg:gap-16">
-          {/* Left — Image */}
           <div className="space-y-4">
             <div className="aspect-[3/4] rounded-2xl overflow-hidden">
-              <img src={style.image} alt={style.name} className="w-full h-full object-cover" width={800} height={1024} />
+              <img
+                src={stylePrimaryImageUrl(style)}
+                alt={style.name}
+                className="w-full h-full object-cover"
+                width={800}
+                height={1024}
+              />
             </div>
           </div>
 
-          {/* Right — Customization */}
           <div className="animate-slide-in-right">
             <h1 className="heading-display text-3xl sm:text-4xl font-bold mb-2">{style.name}</h1>
             <div className="flex items-center gap-3 text-muted-foreground mb-4">
-              <Clock className="w-4 h-4" /> {style.duration}
+              <Clock className="w-4 h-4" /> {formatStyleDuration(style)}
             </div>
-            <p className="text-muted-foreground leading-relaxed mb-8">{style.description}</p>
+            <p className="text-muted-foreground leading-relaxed mb-8">{style.description ?? ""}</p>
 
             <div className="space-y-8">
-              {/* Part Size */}
-              <div>
-                <h3 className="font-semibold text-sm uppercase tracking-wider text-muted-foreground mb-3">Part Size</h3>
-                <div className="grid grid-cols-3 gap-3">
-                  {style.partSizes.map(ps => (
-                    <button
-                      key={ps.label}
-                      onClick={() => setPartSize(ps.label)}
-                      className={`p-3 rounded-lg border-2 text-sm font-medium transition-all ${
-                        partSize === ps.label
-                          ? "border-accent bg-accent/10 text-foreground"
-                          : "border-border hover:border-muted-foreground/30"
-                      }`}
+              {types.map((optionType) => {
+                const opts = grouped[optionType] ?? [];
+                if (!opts.length) return null;
+                return (
+                  <div key={optionType}>
+                    <h3 className="font-semibold text-sm uppercase tracking-wider text-muted-foreground mb-3">
+                      {humanizeOptionType(optionType)}
+                    </h3>
+                    <div
+                      className={
+                        optionType === "color"
+                          ? "flex flex-wrap gap-3"
+                          : "grid grid-cols-2 sm:grid-cols-3 gap-3"
+                      }
                     >
-                      <div>{ps.label}</div>
-                      <div className="text-xs text-muted-foreground mt-0.5">+${ps.price}</div>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Length */}
-              <div>
-                <h3 className="font-semibold text-sm uppercase tracking-wider text-muted-foreground mb-3">Length</h3>
-                <div className="grid grid-cols-2 gap-3">
-                  {style.lengths.map(l => (
-                    <button
-                      key={l}
-                      onClick={() => setLength(l)}
-                      className={`p-3 rounded-lg border-2 text-sm font-medium transition-all flex items-center gap-2 ${
-                        length === l
-                          ? "border-accent bg-accent/10 text-foreground"
-                          : "border-border hover:border-muted-foreground/30"
-                      }`}
-                    >
-                      {length === l && <Check className="w-4 h-4 text-accent" />}
-                      {l}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Color */}
-              <div>
-                <h3 className="font-semibold text-sm uppercase tracking-wider text-muted-foreground mb-3">Hair Color</h3>
-                <div className="flex flex-wrap gap-3">
-                  {style.colors.map(c => (
-                    <button
-                      key={c.name}
-                      onClick={() => setColor(c.name)}
-                      className={`flex items-center gap-2 p-2.5 pr-4 rounded-lg border-2 text-sm font-medium transition-all ${
-                        color === c.name
-                          ? "border-accent bg-accent/10"
-                          : "border-border hover:border-muted-foreground/30"
-                      }`}
-                    >
-                      <div
-                        className="w-6 h-6 rounded-full border border-border"
-                        style={{ background: c.hex }}
-                      />
-                      <span>{c.name}</span>
-                      {c.extraCost > 0 && <span className="text-xs text-muted-foreground">+${c.extraCost}</span>}
-                    </button>
-                  ))}
-                </div>
-              </div>
+                      {opts.map((opt) => {
+                        const selected = selectedIdByType[optionType] === opt.id;
+                        return (
+                          <button
+                            key={opt.id}
+                            type="button"
+                            onClick={() => setSelectedForType(optionType, opt.id)}
+                            className={`p-3 rounded-lg border-2 text-sm font-medium transition-all flex items-center gap-2 ${
+                              optionType === "color" ? "pr-4" : "flex-col sm:flex-row justify-center"
+                            } ${
+                              selected
+                                ? "border-accent bg-accent/10 text-foreground"
+                                : "border-border hover:border-muted-foreground/30"
+                            }`}
+                          >
+                            {optionType === "color" && selected && (
+                              <Check className="w-4 h-4 text-accent shrink-0" />
+                            )}
+                            {optionType === "color" && (
+                              <span
+                                className="w-6 h-6 rounded-full border border-border shrink-0 bg-muted"
+                                aria-hidden
+                              />
+                            )}
+                            <span>{opt.name}</span>
+                            {opt.priceModifier > 0 && (
+                              <span className="text-xs text-muted-foreground">
+                                +${opt.priceModifier}
+                              </span>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
 
-            {/* Price & CTA */}
             <div className="mt-10 p-6 rounded-xl bg-secondary border border-border">
               <div className="flex items-center justify-between mb-4">
                 <span className="text-muted-foreground">Base price</span>
                 <span>${style.basePrice}</span>
               </div>
-              <div className="flex items-center justify-between mb-4">
-                <span className="text-muted-foreground">Part size ({partSize})</span>
-                <span>+${style.partSizes.find(p => p.label === partSize)?.price}</span>
-              </div>
-              {style.colors.find(c => c.name === color)?.extraCost! > 0 && (
-                <div className="flex items-center justify-between mb-4">
-                  <span className="text-muted-foreground">Color ({color})</span>
-                  <span>+${style.colors.find(c => c.name === color)?.extraCost}</span>
-                </div>
-              )}
+              {types.map((optionType) => {
+                const id = selectedIdByType[optionType];
+                const opt = style.customizationOptions.find((o) => o.id === id);
+                if (!opt || opt.priceModifier <= 0) return null;
+                return (
+                  <div
+                    key={`line-${optionType}`}
+                    className="flex items-center justify-between mb-4"
+                  >
+                    <span className="text-muted-foreground">
+                      {humanizeOptionType(optionType)} ({opt.name})
+                    </span>
+                    <span>+${opt.priceModifier}</span>
+                  </div>
+                );
+              })}
               <div className="border-t border-border pt-4 flex items-center justify-between">
                 <span className="font-display text-lg font-bold">Total</span>
-                <span className="font-display text-2xl font-bold text-accent">${totalPrice}</span>
+                <span className="font-display text-2xl font-bold text-accent">
+                  ${Number(totalPrice.toFixed(2))}
+                </span>
               </div>
-              <button onClick={handleProceed} className="btn-gold w-full mt-6 text-center">
+              <button type="button" onClick={handleProceed} className="btn-gold w-full mt-6 text-center">
                 Proceed to Book
               </button>
             </div>
