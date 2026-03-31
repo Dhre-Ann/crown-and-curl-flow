@@ -1,4 +1,8 @@
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:5000";
+const envApi = import.meta.env.VITE_API_BASE_URL;
+const API_BASE_URL =
+  typeof envApi === "string" && envApi.trim() !== ""
+    ? envApi.replace(/\/$/, "")
+    : "http://localhost:5000";
 const TOKEN_KEY = "crownStudioToken";
 
 // TODO: Replace with dynamic subdomain resolution in production.

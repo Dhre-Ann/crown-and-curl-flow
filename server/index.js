@@ -6,8 +6,11 @@ const authRoutes = require("./routes/auth");
 
 const app = express();
 
-// Allow the local frontend only; keep CORS tight for security.
-const allowedOrigins = ["http://localhost:3000", "http://localhost:8080"];
+const defaultOrigins = ["http://localhost:3000", "http://localhost:8080"];
+const extraOrigins = process.env.CORS_ORIGINS
+  ? process.env.CORS_ORIGINS.split(",").map((o) => o.trim()).filter(Boolean)
+  : [];
+const allowedOrigins = [...defaultOrigins, ...extraOrigins];
 app.use(cors({ origin: allowedOrigins }));
 app.use(express.json());
 
