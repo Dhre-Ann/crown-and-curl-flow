@@ -11,6 +11,7 @@ export default defineConfig(({ mode }) => ({
       overlay: false,
     },
   },
+  base: "/crown-and-curl-flow/",
   plugins: [react()],
   resolve: {
     alias: {
