@@ -74,8 +74,22 @@ function buildHeaders(auth: boolean) {
   return headers;
 }
 
+/**
+ * Adds shopSlug to the URL so shopResolver can read it from req.query / originalUrl.
+ * Fetch still sends x-shop-slug; the query duplicates the tenant for DevTools "open in new tab"
+ * and for Express mounts where req.query can be empty while originalUrl keeps the search string.
+ */
+function appendShopSlugQuery(path: string): string {
+  const u = new URL(path, "http://local.fake");
+  if (!u.searchParams.has("shopSlug") && !u.searchParams.has("slug")) {
+    u.searchParams.set("shopSlug", DEV_SHOP_SLUG);
+  }
+  return `${u.pathname}${u.search}`;
+}
+
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  const response = await fetch(`${API_BASE_URL}${path}`, {
+  const pathWithShop = appendShopSlugQuery(path);
+  const response = await fetch(`${API_BASE_URL}${pathWithShop}`, {
     method: options.method ?? "GET",
     headers: buildHeaders(options.auth ?? false),
     body: options.body ? JSON.stringify(options.body) : undefined,

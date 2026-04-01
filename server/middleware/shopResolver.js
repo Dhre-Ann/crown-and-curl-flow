@@ -1,68 +1,88 @@
 const prisma = require("../lib/prisma");
 
 /**
- * Read x-shop-slug from every place Node may expose it. Some stacks only surface
- * duplicate or custom headers on rawHeaders / headersDistinct; bracket access on
- * req.headers alone can be empty even when the client sent the header.
+ * When a sub-router is mounted, Express may leave req.query empty even though the client sent a query string.
+ * The full path + search from the incoming request is still on originalUrl, so we parse shopSlug/slug from there.
+ * Base URL is only for the URL parser; it is not used as a tenant default.
  */
-function extractShopSlug(req) {
-  const pick = (v) => {
-    if (v == null) return "";
-    if (typeof v === "string") return v.trim();
-    if (Array.isArray(v)) {
-      for (const x of v) {
-        const s = String(x).trim();
-        if (s) return s;
-      }
-      return "";
+function readShopSlugFromOriginalUrl(req) {
+  try {
+    const pathAndSearch = req.originalUrl || req.url || "";
+    const u = new URL(pathAndSearch, "http://resolver.local");
+    const shopSlug = u.searchParams.get("shopSlug") || u.searchParams.get("slug");
+    if (shopSlug && typeof shopSlug === "string" && shopSlug.trim()) {
+      return shopSlug.trim();
     }
-    return String(v).trim();
-  };
-
-  let s = pick(req.headers?.["x-shop-slug"]);
-  if (s) return s;
-
-  if (req.headers && typeof req.headers === "object") {
-    for (const key of Object.keys(req.headers)) {
-      if (key.toLowerCase() === "x-shop-slug") {
-        s = pick(req.headers[key]);
-        if (s) return s;
-      }
-    }
+  } catch {
+    // ignore malformed URLs
   }
+  return null;
+}
 
+function readShopSlugFromRawHeaders(req) {
   const raw = req.rawHeaders;
-  if (Array.isArray(raw)) {
-    for (let i = 0; i < raw.length - 1; i += 2) {
-      if (String(raw[i]).toLowerCase() === "x-shop-slug") {
-        s = pick(raw[i + 1]);
-        if (s) return s;
+  if (!raw || !Array.isArray(raw)) {
+    return null;
+  }
+  for (let i = 0; i < raw.length; i += 2) {
+    if (String(raw[i]).toLowerCase() === "x-shop-slug") {
+      const v = raw[i + 1];
+      if (v && typeof v === "string" && v.trim()) {
+        return v.trim();
       }
     }
   }
+  return null;
+}
 
-  const distinct = req.headersDistinct;
-  if (distinct && typeof distinct === "object") {
-    s = pick(distinct["x-shop-slug"]);
-    if (s) return s;
+function readShopSlugFromQuery(req) {
+  const q = req.query || {};
+  const v = q.shopSlug ?? q.slug;
+  if (typeof v === "string" && v.trim()) {
+    return v.trim();
+  }
+  if (Array.isArray(v) && v.length > 0) {
+    const first = v[0];
+    if (first != null && String(first).trim()) {
+      return String(first).trim();
+    }
+  }
+  return null;
+}
+
+/**
+ * Resolution order: normalized header → rawHeaders → query object → originalUrl query string.
+ */
+function resolveShopSlug(req) {
+  const fromHeader = req.headers["x-shop-slug"];
+  if (typeof fromHeader === "string" && fromHeader.trim()) {
+    return fromHeader.trim();
   }
 
-  return "";
+  const fromRaw = readShopSlugFromRawHeaders(req);
+  if (fromRaw) {
+    return fromRaw;
+  }
+
+  const fromQuery = readShopSlugFromQuery(req);
+  if (fromQuery) {
+    return fromQuery;
+  }
+
+  return readShopSlugFromOriginalUrl(req);
 }
 
 async function shopResolver(req, res, next) {
-  // CORS preflight is OPTIONS and does not include custom headers; the slug is only sent on the real request.
-  if (req.method === "OPTIONS") {
-    return next();
-  }
-
-  const shopSlug = extractShopSlug(req);
+  const shopSlug = resolveShopSlug(req);
 
   if (!shopSlug) {
-    return res.status(400).json({ success: false, error: "x-shop-slug header is required" });
+    return res.status(400).json({
+      success: false,
+      error:
+        "Missing shop identifier. Send header x-shop-slug, or add query shopSlug or slug (browser navigations cannot set custom headers).",
+    });
   }
 
-  // Every shop-scoped request must resolve a concrete shop record first.
   const shop = await prisma.shop.findUnique({
     where: { slug: shopSlug },
   });
