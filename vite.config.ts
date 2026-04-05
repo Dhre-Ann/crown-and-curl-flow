@@ -5,6 +5,7 @@ import path from "path";
 // For GitHub project Pages use `npm run build:gh-pages` (or set VITE_BASE_PATH to `/<repo>/`).
 export default defineConfig(() => ({
   base: process.env.VITE_BASE_PATH || "/",
+  envDir: path.resolve(__dirname, "src"),
   server: {
     host: "::",
     port: 8080,

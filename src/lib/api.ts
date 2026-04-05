@@ -7,8 +7,25 @@ const API_BASE_URL =
     : "http://localhost:5000";
 const TOKEN_KEY = "crownStudioToken";
 
-// TODO: Replace with dynamic subdomain resolution in production.
-const DEV_SHOP_SLUG = "kairstyles";
+/** Shop storefront tenant: subdomain in production, VITE_SHOP_SLUG in dev, or null on main domain (customer context). */
+export function getShopSlug(): string | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  const hostname = window.location.hostname;
+  const parts = hostname.split(".");
+  if (parts.length >= 3) {
+    return parts[0];
+  }
+
+  const envSlug = import.meta.env.VITE_SHOP_SLUG;
+  if (typeof envSlug === "string" && envSlug.trim() !== "") {
+    return envSlug.trim();
+  }
+
+  return null;
+}
 
 export interface ApiUser {
   id: string;
@@ -26,6 +43,23 @@ export interface ApiShop {
   ownerId: string | null;
   subscriptionStatus: string;
   createdAt: string;
+}
+
+export interface MyAppointment {
+  id: string;
+  date: string;
+  time: string;
+  status: string;
+  depositAmount: number;
+  totalPrice: number;
+  shop: { name: string; slug: string };
+  style: { name: string };
+}
+
+export interface CustomerTech {
+  shopName: string;
+  slug: string;
+  lastAppointmentDate: string;
 }
 
 interface ApiSuccess<T> {
@@ -61,8 +95,12 @@ export function clearToken() {
 function buildHeaders(auth: boolean) {
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
-    "x-shop-slug": DEV_SHOP_SLUG,
   };
+
+  const slug = getShopSlug();
+  if (slug) {
+    headers["x-shop-slug"] = slug;
+  }
 
   if (auth) {
     const token = getToken();
@@ -75,14 +113,17 @@ function buildHeaders(auth: boolean) {
 }
 
 /**
- * Adds shopSlug to the URL so shopResolver can read it from req.query / originalUrl.
- * Fetch still sends x-shop-slug; the query duplicates the tenant for DevTools "open in new tab"
- * and for Express mounts where req.query can be empty while originalUrl keeps the search string.
+ * When a shop slug exists, add it to the query so links opened without custom headers still resolve the tenant
+ * (see server shopResolver: originalUrl / query).
  */
 function appendShopSlugQuery(path: string): string {
+  const slug = getShopSlug();
+  if (!slug) {
+    return path;
+  }
   const u = new URL(path, "http://local.fake");
   if (!u.searchParams.has("shopSlug") && !u.searchParams.has("slug")) {
-    u.searchParams.set("shopSlug", DEV_SHOP_SLUG);
+    u.searchParams.set("shopSlug", slug);
   }
   return `${u.pathname}${u.search}`;
 }
@@ -113,12 +154,7 @@ export async function loginRequest(payload: { email: string; password: string })
   });
 }
 
-export async function registerCustomerRequest(payload: {
-  name: string;
-  email: string;
-  password: string;
-  shopSlug?: string;
-}) {
+export async function registerCustomerRequest(payload: { name: string; email: string; password: string }) {
   return request<{ token: string; user: ApiUser }>("/api/auth/register", {
     method: "POST",
     body: payload,
@@ -142,6 +178,20 @@ export async function meRequest() {
   return request<{ user: ApiUser; shop: ApiShop | null }>("/api/auth/me", {
     auth: true,
   });
+}
+
+export async function fetchMyAppointmentsRequest(): Promise<MyAppointment[]> {
+  const data = await request<{ appointments: MyAppointment[] }>("/api/appointments/mine", {
+    auth: true,
+  });
+  return data.appointments;
+}
+
+export async function fetchCustomerTechsRequest(): Promise<CustomerTech[]> {
+  const data = await request<{ techs: CustomerTech[] }>("/api/customer/techs", {
+    auth: true,
+  });
+  return data.techs;
 }
 
 export async function fetchStylesCatalog(opts?: { auth?: boolean }): Promise<CatalogStyle[]> {
@@ -224,4 +274,30 @@ export async function removeStyleOptionRequest(styleId: string, optionId: string
     auth: true,
   });
   return data.style;
+}
+
+/**
+ * Build a URL to open a shop's storefront. On localhost, subdomain.localhost hits the same dev server when supported.
+ */
+export function getShopStorefrontHref(slug: string): string {
+  if (typeof window === "undefined") {
+    return `https://${slug}.crownstudio.com/`;
+  }
+  const hostname = window.location.hostname;
+  const port = window.location.port;
+  const protocol = window.location.protocol;
+
+  if (hostname === "localhost" || hostname === "127.0.0.1") {
+    const p = port || "8080";
+    return `${protocol}//${slug}.localhost:${p}/`;
+  }
+
+  const parts = hostname.split(".");
+  if (parts.length >= 3) {
+    const rest = parts.slice(1).join(".");
+    const portSeg = port ? `:${port}` : "";
+    return `${protocol}//${slug}.${rest}${portSeg}/`;
+  }
+
+  return `https://${slug}.crownstudio.com/`;
 }

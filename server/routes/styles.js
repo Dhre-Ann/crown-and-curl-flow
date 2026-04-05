@@ -1,7 +1,7 @@
 const express = require("express");
 const { Prisma } = require("@prisma/client");
 const prisma = require("../lib/prisma");
-const shopResolver = require("../middleware/shopResolver");
+const { requireShop } = require("../middleware/shopResolver");
 const {
   requireAuth,
   requireShopAdmin,
@@ -51,7 +51,7 @@ async function findStyleInShop(styleId, shopId) {
 
 // GET / — Public catalog uses isAvailable only. When a valid shop_admin JWT matches x-shop-slug,
 // return every style so the admin UI can toggle visibility without a separate list endpoint.
-router.get("/", shopResolver, async (req, res) => {
+router.get("/", requireShop, async (req, res) => {
   try {
     const payload = optionalAuthPayload(req);
     const isAdminOfThisShop =
@@ -80,7 +80,7 @@ router.get("/", shopResolver, async (req, res) => {
 });
 
 // GET /:id — Public detail only for active services so deep links cannot surface hidden catalog items.
-router.get("/:id", shopResolver, async (req, res) => {
+router.get("/:id", requireShop, async (req, res) => {
   try {
     const style = await prisma.style.findFirst({
       where: {
@@ -103,7 +103,7 @@ router.get("/:id", shopResolver, async (req, res) => {
 
 router.post(
   "/",
-  shopResolver,
+  requireShop,
   requireAuth,
   requireShopAdmin,
   requireShopAdminMatchesShop,
@@ -154,7 +154,7 @@ router.post(
 
 router.put(
   "/:id",
-  shopResolver,
+  requireShop,
   requireAuth,
   requireShopAdmin,
   requireShopAdminMatchesShop,
@@ -212,7 +212,7 @@ router.put(
 
 router.delete(
   "/:id",
-  shopResolver,
+  requireShop,
   requireAuth,
   requireShopAdmin,
   requireShopAdminMatchesShop,
@@ -242,7 +242,7 @@ router.delete(
 
 router.patch(
   "/:id/toggle",
-  shopResolver,
+  requireShop,
   requireAuth,
   requireShopAdmin,
   requireShopAdminMatchesShop,
@@ -270,7 +270,7 @@ router.patch(
 
 router.post(
   "/:id/options",
-  shopResolver,
+  requireShop,
   requireAuth,
   requireShopAdmin,
   requireShopAdminMatchesShop,
@@ -328,7 +328,7 @@ router.post(
 
 router.delete(
   "/:id/options/:optionId",
-  shopResolver,
+  requireShop,
   requireAuth,
   requireShopAdmin,
   requireShopAdminMatchesShop,

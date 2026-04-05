@@ -47,14 +47,14 @@ async function main() {
       name: "Demo Customer",
       role: "customer",
       password: passwordHash,
-      shopId: shop.id,
+      shopId: null,
     },
     create: {
       name: "Demo Customer",
       email: "customer@demo.com",
       password: passwordHash,
       role: "customer",
-      shopId: shop.id,
+      shopId: null,
     },
   });
 

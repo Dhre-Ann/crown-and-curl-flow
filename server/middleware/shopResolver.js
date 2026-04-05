@@ -52,6 +52,7 @@ function readShopSlugFromQuery(req) {
 
 /**
  * Resolution order: normalized header → rawHeaders → query object → originalUrl query string.
+ * Matches how browsers and fetch clients send the tenant (header preferred; query supports plain links).
  */
 function resolveShopSlug(req) {
   const fromHeader = req.headers["x-shop-slug"];
@@ -72,15 +73,16 @@ function resolveShopSlug(req) {
   return readShopSlugFromOriginalUrl(req);
 }
 
+/**
+ * Optional tenant resolution: attaches req.shop when a slug resolves to a real shop; otherwise req.shop is null.
+ * Customer-global routes (e.g. dashboard API) omit the slug and proceed without a shop.
+ */
 async function shopResolver(req, res, next) {
   const shopSlug = resolveShopSlug(req);
 
   if (!shopSlug) {
-    return res.status(400).json({
-      success: false,
-      error:
-        "Missing shop identifier. Send header x-shop-slug, or add query shopSlug or slug (browser navigations cannot set custom headers).",
-    });
+    req.shop = null;
+    return next();
   }
 
   const shop = await prisma.shop.findUnique({
@@ -95,4 +97,12 @@ async function shopResolver(req, res, next) {
   return next();
 }
 
-module.exports = shopResolver;
+/** Use after shopResolver on routes that must be scoped to a single shop (catalog, admin styles, etc.). */
+function requireShop(req, res, next) {
+  if (!req.shop) {
+    return res.status(400).json({ success: false, error: "Shop context required" });
+  }
+  return next();
+}
+
+module.exports = { shopResolver, requireShop };

@@ -2,8 +2,11 @@ require("dotenv").config();
 
 const express = require("express");
 const cors = require("cors");
+const { shopResolver } = require("./middleware/shopResolver");
 const authRoutes = require("./routes/auth");
 const stylesRoutes = require("./routes/styles");
+const appointmentsRoutes = require("./routes/appointments");
+const customerRoutes = require("./routes/customer");
 
 const app = express();
 
@@ -15,12 +18,17 @@ const allowedOrigins = [...defaultOrigins, ...extraOrigins];
 app.use(cors({ origin: allowedOrigins }));
 app.use(express.json());
 
+// Resolve optional shop tenant from header/query before route handlers (req.shop or null).
+app.use(shopResolver);
+
 app.get("/api/health", (req, res) => {
   res.status(200).json({ success: true, message: "Crown Studio API is running" });
 });
 
 app.use("/api/auth", authRoutes);
 app.use("/api/styles", stylesRoutes);
+app.use("/api/appointments", appointmentsRoutes);
+app.use("/api/customer", customerRoutes);
 
 // Placeholder route groups (future phases).
 // Appointments routes

@@ -20,7 +20,6 @@ interface RegisterCustomerPayload {
   name: string;
   email: string;
   password: string;
-  shopSlug?: string;
 }
 
 interface RegisterShopPayload {

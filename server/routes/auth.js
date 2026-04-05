@@ -3,7 +3,6 @@ const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const prisma = require("../lib/prisma");
 const { requireAuth, loadCurrentUser } = require("../middleware/auth");
-const shopResolver = require("../middleware/shopResolver");
 
 const router = express.Router();
 const SALT_ROUNDS = 12;
@@ -35,20 +34,11 @@ function signToken(user) {
   });
 }
 
-router.post("/register", shopResolver, async (req, res) => {
+router.post("/register", async (req, res) => {
   try {
-    const { name, email, password, shopSlug } = req.body;
+    const { name, email, password } = req.body;
     if (!name || !email || !password) {
       return res.status(400).json({ success: false, error: "name, email and password are required" });
-    }
-
-    let resolvedShopId = req.shop.id;
-    if (shopSlug) {
-      const shopFromBody = await prisma.shop.findUnique({ where: { slug: shopSlug } });
-      if (!shopFromBody) {
-        return res.status(404).json({ success: false, error: "Shop not found for provided shopSlug" });
-      }
-      resolvedShopId = shopFromBody.id;
     }
 
     const existingUser = await prisma.user.findUnique({ where: { email } });
@@ -57,13 +47,14 @@ router.post("/register", shopResolver, async (req, res) => {
     }
 
     const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
+    // Customers are platform-wide; they are not tied to a single shop row.
     const user = await prisma.user.create({
       data: {
         name,
         email,
         password: passwordHash,
         role: "customer",
-        shopId: resolvedShopId,
+        shopId: null,
       },
     });
 
@@ -151,7 +142,7 @@ router.post("/shop-register", async (req, res) => {
   }
 });
 
-router.post("/login", shopResolver, async (req, res) => {
+router.post("/login", async (req, res) => {
   try {
     const { email, password } = req.body;
     if (!email || !password) {
@@ -172,16 +163,23 @@ router.post("/login", shopResolver, async (req, res) => {
       return res.status(401).json({ success: false, error: "Invalid credentials" });
     }
 
-    if (user.role === "shop_admin" && user.shopId !== req.shop.id) {
+    // Shop admins are only denied when a shop slug was sent and it does not match their assigned shop.
+    if (user.role === "shop_admin" && req.shop && user.shopId !== req.shop.id) {
       return res.status(403).json({ success: false, error: "You do not have access to this shop" });
     }
 
-    if (user.role === "customer" && user.shopId !== req.shop.id) {
-      return res.status(403).json({ success: false, error: "You do not have access to this shop" });
-    }
+    // Customers use one account across all shops; never tie login to a single shopId.
 
     const token = signToken(user);
-    const shop = user.role === "super_admin" ? null : req.shop;
+
+    let shop = null;
+    if (user.role === "super_admin") {
+      shop = null;
+    } else if (user.role === "shop_admin") {
+      shop = req.shop && user.shopId === req.shop.id ? req.shop : user.shop;
+    } else {
+      shop = req.shop ?? null;
+    }
 
     return res.status(200).json({
       success: true,
@@ -196,13 +194,20 @@ router.post("/login", shopResolver, async (req, res) => {
   }
 });
 
-router.get("/me", shopResolver, requireAuth, loadCurrentUser, async (req, res) => {
+router.get("/me", requireAuth, loadCurrentUser, async (req, res) => {
   const user = req.currentUser;
-  if (user.role === "shop_admin" && user.shopId !== req.shop.id) {
+  if (user.role === "shop_admin" && req.shop && user.shopId !== req.shop.id) {
     return res.status(403).json({ success: false, error: "You do not have access to this shop" });
   }
 
-  const shop = req.shop;
+  let shop = null;
+  if (user.role === "super_admin") {
+    shop = null;
+  } else if (user.role === "shop_admin") {
+    shop = req.shop ?? user.shop;
+  } else {
+    shop = req.shop ?? null;
+  }
 
   return res.status(200).json({
     success: true,
