@@ -22,9 +22,6 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
-    # So the same secret works whether it is stored under Repository secrets or the github-pages Environment.
-    environment:
-      name: github-pages
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
@@ -32,33 +29,15 @@ jobs:
           node-version: "22"
           cache: npm
       - run: npm ci
-      # Writes public/api-runtime-config.js so the live site always gets the API URL even if the Vite env embed failed.
-      - name: Inject API URL for static hosting
-        env:
-          VITE_API_BASE_URL: ${{ secrets.VITE_API_BASE_URL }}
-        run: |
-          node <<'NODE'
-          const fs = require("fs");
-          const u = (process.env.VITE_API_BASE_URL || "").trim().replace(/\/$/, "");
-          const lines = [
-            "/** Auto-generated in GitHub Actions — do not commit secrets here. */",
-            u
-              ? `window.__CROWN_STUDIO_API_BASE__ = ${JSON.stringify(u)};`
-              : `window.__CROWN_STUDIO_API_BASE__ = "";`,
-            "",
-          ];
-          fs.mkdirSync("public", { recursive: true });
-          fs.writeFileSync("public/api-runtime-config.js", lines.join("\n"), "utf8");
-          if (!u) {
-            console.log("::warning::VITE_API_BASE_URL is empty — Browse shops / API calls will fail on Pages until you add the repository or github-pages environment secret.");
-          }
-          NODE
+      # Without VITE_API_BASE_URL, the bundle uses localhost — login/API only works after you add the secret and redeploy.
       - name: Check VITE_API_BASE_URL secret
         env:
           VITE_API_BASE_URL: ${{ secrets.VITE_API_BASE_URL }}
         run: |
-          if [ -z "$VITE_API_BASE_URL" ]; then
-            echo "::warning::VITE_API_BASE_URL is not set. Add it under Settings → Secrets → Actions (repository) OR under the github-pages environment. Set CORS_ORIGINS on Render to your Pages origin (e.g. https://YOUR_USER.github.io)."
+          if [ -z "${VITE_API_BASE_URL:-}" ]; then
+            echo "::warning::VITE_API_BASE_URL repository secret is empty — the bundle will default to localhost unless you set window.__CROWN_STUDIO_API_BASE__ in public/api-runtime-config.js."
+          else
+            echo "::notice::VITE_API_BASE_URL is set for this build (value hidden)."
           fi
       - name: Build static site
         env:

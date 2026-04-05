@@ -16,7 +16,38 @@ const extraOrigins = process.env.CORS_ORIGINS
   ? process.env.CORS_ORIGINS.split(",").map((o) => o.trim()).filter(Boolean)
   : [];
 const allowedOrigins = [...defaultOrigins, ...extraOrigins];
-app.use(cors({ origin: allowedOrigins }));
+
+// Browsers send Origin as scheme + host only (no path). For GitHub project pages, use https://<user>.github.io — not the full /repo path.
+const relaxGithubIo =
+  process.env.CORS_ALLOW_GITHUB_PAGES === "1" || process.env.CORS_ALLOW_GITHUB_PAGES === "true";
+
+function isGithubPagesOrigin(origin) {
+  try {
+    const u = new URL(origin);
+    return u.hostname === "github.io" || u.hostname.endsWith(".github.io");
+  } catch {
+    return false;
+  }
+}
+
+app.use(
+  cors({
+    origin(origin, callback) {
+      if (!origin) {
+        return callback(null, true);
+      }
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+      if (relaxGithubIo && isGithubPagesOrigin(origin)) {
+        return callback(null, true);
+      }
+      return callback(null, false);
+    },
+    allowedHeaders: ["Content-Type", "Authorization", "x-shop-slug"],
+    methods: ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  })
+);
 app.use(express.json());
 
 // Resolve optional shop tenant from header/query before route handlers (req.shop or null).

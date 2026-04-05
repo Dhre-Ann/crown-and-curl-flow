@@ -18,7 +18,7 @@
 
   <body>
     <div id="root"></div>
-    <!-- Runs before the bundle; CI can inject your Render API URL here for GitHub Pages. -->
+    <!-- Loads before the bundle so getApiBaseUrl() can read window.__CROWN_STUDIO_API_BASE__ (see public/api-runtime-config.js). -->
     <script src="./api-runtime-config.js"></script>
     <script type="module" src="/src/main.tsx"></script>
   </body>

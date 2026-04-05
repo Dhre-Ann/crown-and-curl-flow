@@ -2,15 +2,15 @@ import type { CatalogStyle, StyleCustomizationOption } from "@/types/style";
 
 const TOKEN_KEY = "crownStudioToken";
 
-/**
- * API origin: runtime script (GitHub Pages) → Vite env (build) → local dev default.
- * On Pages, `public/api-runtime-config.js` must set window.__CROWN_STUDIO_API_BASE__ if the bundle was built without the secret.
- */
+type CrownStudioWindow = Window & { __CROWN_STUDIO_API_BASE__?: string };
+
+/** Runtime override (public/api-runtime-config.js) → Vite env → local dev server. */
 export function getApiBaseUrl(): string {
   if (typeof window !== "undefined") {
-    const r = window.__CROWN_STUDIO_API_BASE__;
-    if (typeof r === "string" && r.trim() !== "") {
-      return r.trim().replace(/\/$/, "");
+    const w = window as CrownStudioWindow;
+    const rt = w.__CROWN_STUDIO_API_BASE__;
+    if (typeof rt === "string" && rt.trim() !== "") {
+      return rt.replace(/\/$/, "");
     }
   }
   const envApi = import.meta.env.VITE_API_BASE_URL;
@@ -18,6 +18,30 @@ export function getApiBaseUrl(): string {
     return envApi.replace(/\/$/, "");
   }
   return "http://localhost:5000";
+}
+
+const HTML_INSTEAD_OF_API =
+  "Received a web page instead of API data. GitHub Pages only serves static files — set repository secret VITE_API_BASE_URL to your real API (https://…onrender.com), not your Pages site URL. Use Settings → Secrets and variables → Actions (repository secret). Or set window.__CROWN_STUDIO_API_BASE__ in public/api-runtime-config.js before deploy.";
+
+function assertApiBaseNotPagesSelf(base: string): void {
+  if (typeof window === "undefined") return;
+  if (!window.location.hostname.endsWith("github.io")) return;
+  let apiOrigin: string;
+  try {
+    apiOrigin = new URL(base).origin;
+  } catch {
+    return;
+  }
+  if (apiOrigin === window.location.origin) {
+    throw new Error(HTML_INSTEAD_OF_API);
+  }
+}
+
+function isResponseBodyHtml(text: string, contentType: string | null): boolean {
+  const ct = (contentType || "").toLowerCase();
+  if (ct.includes("text/html")) return true;
+  const t = text.trimStart().toLowerCase();
+  return t.startsWith("<!doctype") || t.startsWith("<html") || t.startsWith("<!");
 }
 
 /**
@@ -311,33 +335,45 @@ function appendShopSlugQuery(path: string): string {
 }
 
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
+  const apiBase = getApiBaseUrl();
+  assertApiBaseNotPagesSelf(apiBase);
+
   const pathWithShop = appendShopSlugQuery(path);
-  const base = getApiBaseUrl();
-  const response = await fetch(`${base}${pathWithShop}`, {
+  const url = `${apiBase}${pathWithShop}`;
+  const response = await fetch(url, {
     method: options.method ?? "GET",
     headers: buildHeaders(options.auth ?? false),
     body: options.body ? JSON.stringify(options.body) : undefined,
   });
 
+  const contentType = response.headers.get("content-type");
   const text = await response.text();
-  const trimmed = text.trimStart();
-  const looksLikeHtml = trimmed.startsWith("<") || trimmed.startsWith("<!DOCTYPE");
-  if (looksLikeHtml) {
-    throw new Error(
-      'Received a web page instead of API data. GitHub Pages only serves static files — set repository secret VITE_API_BASE_URL to your real API (https://…onrender.com), not your Pages site URL. Use Settings → Secrets and variables → Actions (repository secret). Or set window.__CROWN_STUDIO_API_BASE__ in public/api-runtime-config.js before deploy.'
-    );
+
+  if (isResponseBodyHtml(text, contentType)) {
+    throw new Error(HTML_INSTEAD_OF_API);
   }
 
   let payload: ApiResponse<T>;
   try {
     payload = JSON.parse(text) as ApiResponse<T>;
   } catch {
-    throw new Error("API returned invalid JSON. Check VITE_API_BASE_URL / api-runtime-config.js points to your API server.");
+    throw new Error(
+      "Invalid API response (not JSON). Check VITE_API_BASE_URL / api-runtime-config.js points at your Express API, not GitHub Pages."
+    );
   }
 
   if (!response.ok || !payload.success) {
     if (payload.success === false) {
-      throw new Error(payload.error);
+      const msg = payload.error;
+      if (
+        typeof msg === "string" &&
+        (msg.toLowerCase().includes("x-shop-slug") || msg.toLowerCase().includes("shop context required"))
+      ) {
+        throw new Error(
+          `${msg} Deploy the latest API from this repo to Render (shop resolver must allow requests without a shop for login and /api/shops).`
+        );
+      }
+      throw new Error(msg);
     }
     throw new Error("Request failed");
   }
