@@ -6,10 +6,19 @@ import {
   meRequest,
   registerCustomerRequest,
   registerShopRequest,
+  setSessionShopSlug,
   setToken,
   type ApiShop,
   type ApiUser,
 } from "@/lib/api";
+
+function syncSessionSlugFromUserAndShop(user: ApiUser, shop: ApiShop | null) {
+  if (user.role === "shop_admin" && shop?.slug) {
+    setSessionShopSlug(shop.slug);
+  } else {
+    setSessionShopSlug(null);
+  }
+}
 
 interface LoginPayload {
   email: string;
@@ -59,6 +68,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const me = await meRequest();
         setUser(me.user);
         setShop(me.shop ?? null);
+        syncSessionSlugFromUserAndShop(me.user, me.shop ?? null);
       } catch {
         clearToken();
         setUser(null);
@@ -76,6 +86,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setToken(response.token);
     setUser(response.user);
     setShop(response.shop ?? null);
+    syncSessionSlugFromUserAndShop(response.user, response.shop ?? null);
     return { user: response.user, shop: response.shop ?? null };
   };
 
@@ -84,6 +95,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setToken(response.token);
     setUser(response.user);
     setShop(null);
+    setSessionShopSlug(null);
     return { user: response.user };
   };
 
@@ -92,6 +104,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setToken(response.token);
     setUser(response.user);
     setShop(response.shop);
+    syncSessionSlugFromUserAndShop(response.user, response.shop);
     return { user: response.user, shop: response.shop };
   };
 

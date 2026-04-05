@@ -34,10 +34,8 @@ jobs:
         env:
           VITE_API_BASE_URL: ${{ secrets.VITE_API_BASE_URL }}
         run: |
-          if [ -z "${VITE_API_BASE_URL:-}" ]; then
-            echo "::warning::VITE_API_BASE_URL repository secret is empty — the bundle will default to localhost unless you set window.__CROWN_STUDIO_API_BASE__ in public/api-runtime-config.js."
-          else
-            echo "::notice::VITE_API_BASE_URL is set for this build (value hidden)."
+          if [ -z "$VITE_API_BASE_URL" ]; then
+            echo "::warning::VITE_API_BASE_URL is not set. The site will call http://localhost:5000 (API will not work on GitHub Pages). Add the repository secret with your HTTPS API base URL and set CORS_ORIGINS on the API to https://dhre-ann.github.io"
           fi
       - name: Build static site
         env:

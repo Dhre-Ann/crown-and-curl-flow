@@ -1,67 +1,13 @@
 import type { CatalogStyle, StyleCustomizationOption } from "@/types/style";
 
+const envApi = import.meta.env.VITE_API_BASE_URL;
+const API_BASE_URL =
+  typeof envApi === "string" && envApi.trim() !== ""
+    ? envApi.replace(/\/$/, "")
+    : "http://localhost:5000";
 const TOKEN_KEY = "crownStudioToken";
-
-type CrownStudioWindow = Window & { __CROWN_STUDIO_API_BASE__?: string };
-
-/** Runtime override (public/api-runtime-config.js) → Vite env → local dev server. */
-export function getApiBaseUrl(): string {
-  if (typeof window !== "undefined") {
-    const w = window as CrownStudioWindow;
-    const rt = w.__CROWN_STUDIO_API_BASE__;
-    if (typeof rt === "string" && rt.trim() !== "") {
-      return rt.replace(/\/$/, "");
-    }
-  }
-  const envApi = import.meta.env.VITE_API_BASE_URL;
-  if (typeof envApi === "string" && envApi.trim() !== "") {
-    return envApi.replace(/\/$/, "");
-  }
-  return "http://localhost:5000";
-}
-
-const HTML_INSTEAD_OF_API =
-  "Received a web page instead of API data. GitHub Pages only serves static files — set repository secret VITE_API_BASE_URL to your real API (https://…onrender.com), not your Pages site URL. Use Settings → Secrets and variables → Actions (repository secret). Or set window.__CROWN_STUDIO_API_BASE__ in public/api-runtime-config.js before deploy.";
-
-function assertApiBaseNotPagesSelf(base: string): void {
-  if (typeof window === "undefined") return;
-  if (!window.location.hostname.endsWith("github.io")) return;
-  let apiOrigin: string;
-  try {
-    apiOrigin = new URL(base).origin;
-  } catch {
-    return;
-  }
-  if (apiOrigin === window.location.origin) {
-    throw new Error(HTML_INSTEAD_OF_API);
-  }
-}
-
-function isResponseBodyHtml(text: string, contentType: string | null): boolean {
-  const ct = (contentType || "").toLowerCase();
-  if (ct.includes("text/html")) return true;
-  const t = text.trimStart().toLowerCase();
-  return t.startsWith("<!doctype") || t.startsWith("<html") || t.startsWith("<!");
-}
-
-/**
- * Hosts where the leftmost DNS label is NOT a Crown shop slug (e.g. GitHub Pages is user.github.io).
- * Without this, dhre-ann.github.io was misread as shop slug "dhre-ann".
- */
-const HOSTS_FIRST_LABEL_IS_NOT_SHOP_SLUG = [
-  "github.io",
-  "vercel.app",
-  "netlify.app",
-  "cloudflarepages.dev",
-  "pages.dev",
-  "herokuapp.com",
-  "azurewebsites.net",
-];
-
-function isManagedOrPagesHostname(hostname: string): boolean {
-  const h = hostname.toLowerCase();
-  return HOSTS_FIRST_LABEL_IS_NOT_SHOP_SLUG.some((suffix) => h === suffix || h.endsWith(`.${suffix}`));
-}
+/** When a shop_admin has no subdomain/query/env tenant, API calls still need x-shop-slug — set from login/me. */
+const SESSION_SHOP_SLUG_KEY = "crownStudioSessionShopSlug";
 
 /**
  * Production: set VITE_SHOP_ROOT_DOMAIN=crownstudio.com so only {slug}.crownstudio.com yields a slug
@@ -108,6 +54,29 @@ function shopSlugFromEnv(): string | null {
   return null;
 }
 
+function sessionShopSlugFromStorage(): string | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+  const raw = localStorage.getItem(SESSION_SHOP_SLUG_KEY);
+  if (typeof raw === "string" && raw.trim() !== "") {
+    return raw.trim();
+  }
+  return null;
+}
+
+/** Call from AuthContext: shop_admin → slug; customer / logout → null (customers stay multi-shop / global). */
+export function setSessionShopSlug(slug: string | null): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+  if (slug != null && String(slug).trim() !== "") {
+    localStorage.setItem(SESSION_SHOP_SLUG_KEY, String(slug).trim());
+  } else {
+    localStorage.removeItem(SESSION_SHOP_SLUG_KEY);
+  }
+}
+
 /** `?shopSlug=` / `?slug=` — global customer app picks a shop without a vanity subdomain. */
 function slugFromSearchParams(): string | null {
   if (typeof window === "undefined") {
@@ -149,7 +118,7 @@ export function hostnameProvidesShopSlug(): boolean {
 }
 
 /**
- * Active shop: `/shops` is never tenant-scoped → `?shopSlug=` (browse hand-off) → hostname → env.
+ * Active shop: `/shops` → none → `?shopSlug=` → hostname → env → session (shop_admin JWT shop only).
  * Query beats hostname so choosing another shop from the directory works on *.localhost too.
  */
 export function getShopSlug(): string | null {
@@ -178,11 +147,12 @@ export function getShopSlug(): string | null {
     return fromLocal;
   }
 
-  if (isManagedOrPagesHostname(hostname)) {
-    return shopSlugFromEnv();
+  const fromEnv = shopSlugFromEnv();
+  if (fromEnv) {
+    return fromEnv;
   }
 
-  return shopSlugFromEnv();
+  return sessionShopSlugFromStorage();
 }
 
 /**
@@ -296,6 +266,7 @@ export function setToken(token: string) {
 
 export function clearToken() {
   localStorage.removeItem(TOKEN_KEY);
+  localStorage.removeItem(SESSION_SHOP_SLUG_KEY);
 }
 
 function buildHeaders(auth: boolean) {
@@ -335,45 +306,17 @@ function appendShopSlugQuery(path: string): string {
 }
 
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  const apiBase = getApiBaseUrl();
-  assertApiBaseNotPagesSelf(apiBase);
-
   const pathWithShop = appendShopSlugQuery(path);
-  const url = `${apiBase}${pathWithShop}`;
-  const response = await fetch(url, {
+  const response = await fetch(`${API_BASE_URL}${pathWithShop}`, {
     method: options.method ?? "GET",
     headers: buildHeaders(options.auth ?? false),
     body: options.body ? JSON.stringify(options.body) : undefined,
   });
 
-  const contentType = response.headers.get("content-type");
-  const text = await response.text();
-
-  if (isResponseBodyHtml(text, contentType)) {
-    throw new Error(HTML_INSTEAD_OF_API);
-  }
-
-  let payload: ApiResponse<T>;
-  try {
-    payload = JSON.parse(text) as ApiResponse<T>;
-  } catch {
-    throw new Error(
-      "Invalid API response (not JSON). Check VITE_API_BASE_URL / api-runtime-config.js points at your Express API, not GitHub Pages."
-    );
-  }
-
+  const payload = (await response.json()) as ApiResponse<T>;
   if (!response.ok || !payload.success) {
     if (payload.success === false) {
-      const msg = payload.error;
-      if (
-        typeof msg === "string" &&
-        (msg.toLowerCase().includes("x-shop-slug") || msg.toLowerCase().includes("shop context required"))
-      ) {
-        throw new Error(
-          `${msg} Deploy the latest API from this repo to Render (shop resolver must allow requests without a shop for login and /api/shops).`
-        );
-      }
-      throw new Error(msg);
+      throw new Error(payload.error);
     }
     throw new Error("Request failed");
   }
