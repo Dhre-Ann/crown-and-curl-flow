@@ -27,7 +27,7 @@ interface RegisterShopPayload {
   email: string;
   password: string;
   shopName: string;
-  shopSlug: string;
+  serviceCategory?: string;
 }
 
 interface AuthContextType {

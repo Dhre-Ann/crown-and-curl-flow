@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from "react";
 import { Link, useSearchParams, useNavigate } from "react-router-dom";
-import { fetchStyleById } from "@/lib/api";
+import { appendActiveShopSlugToParams, fetchStyleById, withShopSearch } from "@/lib/api";
 import type { CatalogStyle } from "@/types/style";
 import { ChevronLeft, ChevronRight, Clock } from "lucide-react";
 
@@ -73,6 +73,7 @@ export default function Book() {
       date: dateStr,
       time: selectedTime,
     });
+    appendActiveShopSlugToParams(cp);
     navigate(`/checkout?${cp.toString()}`);
   };
 
@@ -247,14 +248,14 @@ export default function Book() {
               ) : styleId ? (
                 <p className="text-muted-foreground text-sm">
                   This style is unavailable or was removed.{" "}
-                  <Link to="/services" className="text-accent underline">
+                  <Link to={withShopSearch("/services")} className="text-accent underline">
                     Browse styles
                   </Link>
                 </p>
               ) : (
                 <p className="text-muted-foreground text-sm">
                   No style selected.{" "}
-                  <Link to="/services" className="text-accent underline">
+                  <Link to={withShopSearch("/services")} className="text-accent underline">
                     Browse styles
                   </Link>
                 </p>

@@ -7,24 +7,191 @@ const API_BASE_URL =
     : "http://localhost:5000";
 const TOKEN_KEY = "crownStudioToken";
 
-/** Shop storefront tenant: subdomain in production, VITE_SHOP_SLUG in dev, or null on main domain (customer context). */
+/**
+ * Hosts where the leftmost DNS label is NOT a Crown shop slug (e.g. GitHub Pages is user.github.io).
+ * Without this, dhre-ann.github.io was misread as shop slug "dhre-ann".
+ */
+const HOSTS_FIRST_LABEL_IS_NOT_SHOP_SLUG = [
+  "github.io",
+  "vercel.app",
+  "netlify.app",
+  "cloudflarepages.dev",
+  "pages.dev",
+  "herokuapp.com",
+  "azurewebsites.net",
+];
+
+function isManagedOrPagesHostname(hostname: string): boolean {
+  const h = hostname.toLowerCase();
+  return HOSTS_FIRST_LABEL_IS_NOT_SHOP_SLUG.some((suffix) => h === suffix || h.endsWith(`.${suffix}`));
+}
+
+/**
+ * Production: set VITE_SHOP_ROOT_DOMAIN=crownstudio.com so only {slug}.crownstudio.com yields a slug
+ * (apex crownstudio.com stays customer / marketing context).
+ */
+function slugFromConfiguredRootDomain(hostname: string): string | null {
+  const root = import.meta.env.VITE_SHOP_ROOT_DOMAIN;
+  if (typeof root !== "string" || !root.trim()) {
+    return null;
+  }
+  const rootNorm = root.trim().toLowerCase();
+  const hostNorm = hostname.toLowerCase();
+  if (hostNorm === rootNorm) {
+    return null;
+  }
+  const suffix = `.${rootNorm}`;
+  if (!hostNorm.endsWith(suffix)) {
+    return null;
+  }
+  const sub = hostNorm.slice(0, -suffix.length);
+  if (!sub || sub.includes(".")) {
+    return null;
+  }
+  if (sub === "www") {
+    return null;
+  }
+  return sub;
+}
+
+/** Dev pattern: kairstyles.localhost → kairstyles (see https://datatracker.ietf.org/doc/html/rfc6761). */
+function slugFromLocalhostMultitenancy(hostname: string): string | null {
+  if (!hostname.endsWith(".localhost") || hostname === "localhost") {
+    return null;
+  }
+  const sub = hostname.split(".")[0];
+  return sub || null;
+}
+
+function shopSlugFromEnv(): string | null {
+  const envSlug = import.meta.env.VITE_SHOP_SLUG;
+  if (typeof envSlug === "string" && envSlug.trim() !== "") {
+    return envSlug.trim();
+  }
+  return null;
+}
+
+/** `?shopSlug=` / `?slug=` — global customer app picks a shop without a vanity subdomain. */
+function slugFromSearchParams(): string | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+  const p = new URLSearchParams(window.location.search);
+  const s = p.get("shopSlug") || p.get("slug");
+  if (s && s.trim()) {
+    return s.trim();
+  }
+  return null;
+}
+
+/** On `/shops`, ignore `VITE_SHOP_SLUG` so the directory stays global even in dev defaults. */
+function isShopsBrowsePath(): boolean {
+  if (typeof window === "undefined") {
+    return false;
+  }
+  const base = (import.meta.env.BASE_URL || "/").replace(/\/$/, "");
+  let path = window.location.pathname.replace(/\/$/, "") || "/";
+  if (base && base !== "/" && path.startsWith(base)) {
+    path = path.slice(base.length) || "/";
+  }
+  return path === "/shops";
+}
+
+/** Slug implied only by the hostname (vanity subdomain), so links can omit `?shopSlug=`. */
+function getCanonicalHostnameSlug(): string | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+  const hostname = window.location.hostname;
+  return slugFromConfiguredRootDomain(hostname) || slugFromLocalhostMultitenancy(hostname);
+}
+
+/** True when the hostname alone identifies the tenant (subdomain deploy), not query/env. */
+export function hostnameProvidesShopSlug(): boolean {
+  return getCanonicalHostnameSlug() !== null;
+}
+
+/**
+ * Active shop: `/shops` is never tenant-scoped → `?shopSlug=` (browse hand-off) → hostname → env.
+ * Query beats hostname so choosing another shop from the directory works on *.localhost too.
+ */
 export function getShopSlug(): string | null {
   if (typeof window === "undefined") {
     return null;
   }
 
   const hostname = window.location.hostname;
-  const parts = hostname.split(".");
-  if (parts.length >= 3) {
-    return parts[0];
+
+  if (isShopsBrowsePath()) {
+    return null;
   }
 
-  const envSlug = import.meta.env.VITE_SHOP_SLUG;
-  if (typeof envSlug === "string" && envSlug.trim() !== "") {
-    return envSlug.trim();
+  const fromSearch = slugFromSearchParams();
+  if (fromSearch) {
+    return fromSearch;
   }
 
-  return null;
+  const fromRoot = slugFromConfiguredRootDomain(hostname);
+  if (fromRoot) {
+    return fromRoot;
+  }
+
+  const fromLocal = slugFromLocalhostMultitenancy(hostname);
+  if (fromLocal) {
+    return fromLocal;
+  }
+
+  if (isManagedOrPagesHostname(hostname)) {
+    return shopSlugFromEnv();
+  }
+
+  return shopSlugFromEnv();
+}
+
+/**
+ * Preserve tenant in router links: add `?shopSlug=` when the active slug is not already the hostname slug.
+ */
+export function withShopSearch(path: string): string {
+  const slug = getShopSlug();
+  if (!slug) {
+    return path;
+  }
+  const canonical = getCanonicalHostnameSlug();
+  if (canonical && slug === canonical) {
+    return path;
+  }
+  const u = new URL(path, "http://local.router");
+  u.searchParams.set("shopSlug", slug);
+  return `${u.pathname}${u.search}`;
+}
+
+/** Carry tenant through booking steps when using query-based shop selection. */
+export function appendActiveShopSlugToParams(params: URLSearchParams): void {
+  const slug = getShopSlug();
+  if (!slug) {
+    return;
+  }
+  const canonical = getCanonicalHostnameSlug();
+  if (canonical && slug === canonical) {
+    return;
+  }
+  params.set("shopSlug", slug);
+}
+
+export interface PublicShopListing {
+  id: string;
+  name: string;
+  slug: string;
+  description: string | null;
+  serviceCategory: string | null;
+  subscriptionStatus: string;
+}
+
+/** Path to a shop’s service catalog on the same SPA host (query-based tenant). */
+export function shopServicesPath(slug: string): string {
+  const p = new URLSearchParams();
+  p.set("shopSlug", slug);
+  return `/services?${p.toString()}`;
 }
 
 export interface ApiUser {
@@ -43,6 +210,8 @@ export interface ApiShop {
   ownerId: string | null;
   subscriptionStatus: string;
   createdAt: string;
+  description?: string | null;
+  serviceCategory?: string | null;
 }
 
 export interface MyAppointment {
@@ -166,7 +335,7 @@ export async function registerShopRequest(payload: {
   email: string;
   password: string;
   shopName: string;
-  shopSlug: string;
+  serviceCategory?: string;
 }) {
   return request<{ token: string; user: ApiUser; shop: ApiShop }>("/api/auth/shop-register", {
     method: "POST",
@@ -192,6 +361,11 @@ export async function fetchCustomerTechsRequest(): Promise<CustomerTech[]> {
     auth: true,
   });
   return data.techs;
+}
+
+export async function fetchShopsForBrowseRequest(): Promise<PublicShopListing[]> {
+  const data = await request<{ shops: PublicShopListing[] }>("/api/shops");
+  return data.shops;
 }
 
 export async function fetchStylesCatalog(opts?: { auth?: boolean }): Promise<CatalogStyle[]> {

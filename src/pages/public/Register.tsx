@@ -12,7 +12,7 @@ export default function Register() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [shopName, setShopName] = useState("");
-  const [shopSlug, setShopSlug] = useState("");
+  const [serviceCategory, setServiceCategory] = useState("");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
@@ -23,7 +23,13 @@ export default function Register() {
 
     try {
       if (accountType === "shop_admin") {
-        await registerShop({ name, email, password, shopName, shopSlug });
+        await registerShop({
+          name,
+          email,
+          password,
+          shopName,
+          ...(serviceCategory.trim() ? { serviceCategory: serviceCategory.trim() } : {}),
+        });
         navigate("/admin");
       } else {
         await registerCustomer({ name, email, password });
@@ -103,14 +109,17 @@ export default function Register() {
               </div>
 
               <div>
-                <label className="text-sm font-medium mb-1.5 block">Shop Slug</label>
+                <label className="text-sm font-medium mb-1.5 block">Service category (optional)</label>
                 <input
                   type="text"
-                  value={shopSlug}
-                  onChange={(e) => setShopSlug(e.target.value)}
-                  placeholder="my-shop-slug"
+                  value={serviceCategory}
+                  onChange={(e) => setServiceCategory(e.target.value)}
+                  placeholder="e.g. Hair & braiding, Nails"
                   className="w-full bg-background border border-input rounded-lg px-3 py-2.5 text-sm focus:ring-2 focus:ring-ring focus:outline-none"
                 />
+                <p className="text-xs text-muted-foreground mt-1">
+                  Shown on the public shop directory so clients know what you offer.
+                </p>
               </div>
             </>
           )}

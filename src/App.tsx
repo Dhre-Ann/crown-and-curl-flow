@@ -10,6 +10,7 @@ import Footer from "@/components/layout/Footer";
 import AdminLayout from "@/components/layout/AdminLayout";
 
 import Landing from "@/pages/public/Landing";
+import BrowseShops from "@/pages/public/BrowseShops";
 import Services from "@/pages/public/Services";
 import ServiceDetail from "@/pages/public/ServiceDetail";
 import Book from "@/pages/public/Book";
@@ -50,6 +51,7 @@ const App = () => (
             <main className="flex-1">
               <Routes>
                 <Route path="/" element={<Landing />} />
+                <Route path="/shops" element={<BrowseShops />} />
                 <Route path="/services" element={<Services />} />
                 <Route path="/services/:id" element={<ServiceDetail />} />
                 <Route path="/book" element={<Book />} />

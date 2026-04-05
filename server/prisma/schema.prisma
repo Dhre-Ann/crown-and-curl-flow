@@ -17,6 +17,7 @@ model Shop {
   name                 String
   slug                 String        @unique // e.g. "kairstyles" -> kairstyles.crownstudio.com
   description          String?
+  serviceCategory      String? // e.g. "Hair & braiding", "Nails" — shown on public shop directory
   subscriptionStatus   String        @default("trial") // trial, active, inactive
   subscriptionEndsAt   DateTime?
   createdAt            DateTime      @default(now())

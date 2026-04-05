@@ -94,8 +94,8 @@ export default function CustomerDashboard() {
         ) : upcoming.length === 0 ? (
           <div className="bg-card border border-border rounded-xl p-8 text-center mb-8">
             <p className="text-muted-foreground mb-4">No upcoming appointments.</p>
-            <Link to="/services" className="btn-gold text-sm">
-              Book a Style
+            <Link to="/shops" className="btn-gold text-sm">
+              Browse shops
             </Link>
           </div>
         ) : (

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
-import { fetchStyleById } from "@/lib/api";
+import { useParams, useNavigate, useLocation } from "react-router-dom";
+import { appendActiveShopSlugToParams, fetchStyleById, withShopSearch } from "@/lib/api";
 import type { CatalogStyle } from "@/types/style";
 import { usePriceCalculator } from "@/hooks/usePriceCalculator";
 import { formatStyleDuration, stylePrimaryImageUrl } from "@/lib/styleDisplay";
@@ -9,6 +9,7 @@ import { Clock, Check } from "lucide-react";
 export default function ServiceDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const [style, setStyle] = useState<CatalogStyle | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -38,7 +39,7 @@ export default function ServiceDetail() {
     return () => {
       cancelled = true;
     };
-  }, [id]);
+  }, [id, location.search]);
 
   if (loading) {
     return (
@@ -52,7 +53,7 @@ export default function ServiceDetail() {
     return (
       <div className="section-padding text-center">
         <h1 className="heading-display text-3xl font-bold mb-4">Style Not Found</h1>
-        <button type="button" onClick={() => navigate("/services")} className="btn-gold">
+        <button type="button" onClick={() => navigate(withShopSearch("/services"))} className="btn-gold">
           Browse Styles
         </button>
       </div>
@@ -89,6 +90,7 @@ function ServiceDetailLoaded({
       color,
       total: String(Math.round(totalPrice * 100) / 100),
     });
+    appendActiveShopSlugToParams(params);
     navigate(`/book?${params.toString()}`);
   };
 

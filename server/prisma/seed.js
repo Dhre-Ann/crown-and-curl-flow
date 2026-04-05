@@ -8,12 +8,14 @@ async function main() {
     where: { slug: "kairstyles" },
     update: {
       name: "KairStyles",
+      serviceCategory: "Hair & braiding",
       subscriptionStatus: "trial",
       // subscriptionEndsAt intentionally not seeded yet.
     },
     create: {
       name: "KairStyles",
       slug: "kairstyles",
+      serviceCategory: "Hair & braiding",
       subscriptionStatus: "trial",
     },
   });

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
-import { fetchStylesCatalog } from "@/lib/api";
+import { Link, useLocation } from "react-router-dom";
+import { fetchStylesCatalog, getShopSlug, withShopSearch } from "@/lib/api";
 import type { CatalogStyle } from "@/types/style";
 import { mockReviews } from "@/data/mockReviews";
 import { formatStyleDuration, stylePrimaryImageUrl } from "@/lib/styleDisplay";
@@ -8,14 +8,21 @@ import { Star, ArrowRight, Clock, Sparkles, Calendar } from "lucide-react";
 import heroImage from "@/assets/hero-braids.jpg";
 
 export default function Landing() {
+  const location = useLocation();
   const [featuredStyles, setFeaturedStyles] = useState<CatalogStyle[]>([]);
   const featuredReviews = mockReviews
     .filter((r) => r.status === "featured" || r.status === "approved")
     .slice(0, 3);
 
+  const shopSlug = getShopSlug();
+
   useEffect(() => {
     let cancelled = false;
     (async () => {
+      if (!getShopSlug()) {
+        if (!cancelled) setFeaturedStyles([]);
+        return;
+      }
       try {
         const rows = await fetchStylesCatalog({ auth: false });
         if (!cancelled) setFeaturedStyles(rows.slice(0, 4));
@@ -26,7 +33,7 @@ export default function Landing() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [shopSlug, location.search]);
 
   return (
     <div>
@@ -51,15 +58,17 @@ export default function Landing() {
               Premium braiding & protective styling, rooted in culture and elevated by expert craftsmanship.
             </p>
             <div className="flex flex-wrap gap-4">
-              <Link to="/services" className="btn-gold inline-flex items-center gap-2">
-                Book Now <ArrowRight className="w-4 h-4" />
+              <Link to="/shops" className="btn-gold inline-flex items-center gap-2">
+                Browse shops <ArrowRight className="w-4 h-4" />
               </Link>
-              <Link
-                to="/services"
-                className="btn-outline-warm !border-cream !text-cream hover:!bg-cream/10"
-              >
-                View Styles
-              </Link>
+              {shopSlug ? (
+                <Link
+                  to={withShopSearch("/services")}
+                  className="btn-outline-warm !border-cream !text-cream hover:!bg-cream/10"
+                >
+                  View styles
+                </Link>
+              ) : null}
             </div>
           </div>
         </div>
@@ -94,16 +103,34 @@ export default function Landing() {
             <h2 className="heading-display text-3xl sm:text-4xl font-bold">
               Featured <span className="text-gold-gradient">Styles</span>
             </h2>
-            <Link
-              to="/services"
-              className="text-accent font-medium text-sm flex items-center gap-1 hover:gap-2 transition-all"
-            >
-              View All <ArrowRight className="w-4 h-4" />
-            </Link>
+            {shopSlug ? (
+              <Link
+                to={withShopSearch("/services")}
+                className="text-accent font-medium text-sm flex items-center gap-1 hover:gap-2 transition-all"
+              >
+                View all <ArrowRight className="w-4 h-4" />
+              </Link>
+            ) : (
+              <Link
+                to="/shops"
+                className="text-accent font-medium text-sm flex items-center gap-1 hover:gap-2 transition-all"
+              >
+                Pick a shop <ArrowRight className="w-4 h-4" />
+              </Link>
+            )}
           </div>
+          {!shopSlug ? (
+            <p className="text-center text-muted-foreground max-w-md mx-auto">
+              Choose a shop to see their styles here, or open{" "}
+              <Link to="/shops" className="text-accent underline">
+                Browse shops
+              </Link>
+              .
+            </p>
+          ) : null}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
             {featuredStyles.map((style) => (
-              <Link key={style.id} to={`/services/${style.id}`} className="card-warm group">
+              <Link key={style.id} to={withShopSearch(`/services/${style.id}`)} className="card-warm group">
                 <div className="aspect-[3/4] overflow-hidden">
                   <img
                     src={stylePrimaryImageUrl(style)}

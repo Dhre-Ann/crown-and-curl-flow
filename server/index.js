@@ -7,6 +7,7 @@ const authRoutes = require("./routes/auth");
 const stylesRoutes = require("./routes/styles");
 const appointmentsRoutes = require("./routes/appointments");
 const customerRoutes = require("./routes/customer");
+const shopsRoutes = require("./routes/shops");
 
 const app = express();
 
@@ -26,6 +27,7 @@ app.get("/api/health", (req, res) => {
 });
 
 app.use("/api/auth", authRoutes);
+app.use("/api/shops", shopsRoutes);
 app.use("/api/styles", stylesRoutes);
 app.use("/api/appointments", appointmentsRoutes);
 app.use("/api/customer", customerRoutes);

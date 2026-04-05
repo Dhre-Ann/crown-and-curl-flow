@@ -1,5 +1,6 @@
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
+import { getShopSlug, withShopSearch } from "@/lib/api";
 import { Menu, X, LogOut, User } from "lucide-react";
 import { useState } from "react";
 
@@ -9,6 +10,9 @@ export default function Navbar() {
   const [open, setOpen] = useState(false);
   const isLoggedIn = Boolean(user);
   const isAdmin = user?.role === "shop_admin" || user?.role === "super_admin";
+  const shopSlug = getShopSlug();
+  const primaryBrowseTo = shopSlug ? withShopSearch("/services") : "/shops";
+  const primaryBrowseLabel = shopSlug ? "Services" : "Shops";
 
   const handleLogout = () => {
     logout();
@@ -24,9 +28,20 @@ export default function Navbar() {
 
         {/* Desktop nav */}
         <div className="hidden md:flex items-center gap-8">
-          <Link to="/services" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
-            Services
+          <Link
+            to={primaryBrowseTo}
+            className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+          >
+            {primaryBrowseLabel}
           </Link>
+          {shopSlug ? (
+            <Link
+              to="/shops"
+              className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+            >
+              All Shops
+            </Link>
+          ) : null}
           {isLoggedIn && !isAdmin && (
             <Link to="/customer/dashboard" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
               My Appointments
@@ -63,7 +78,18 @@ export default function Navbar() {
       {/* Mobile menu */}
       {open && (
         <div className="md:hidden border-t border-border bg-background px-4 pb-4 space-y-3">
-          <Link to="/services" onClick={() => setOpen(false)} className="block py-2 text-sm font-medium text-muted-foreground">Services</Link>
+          <Link
+            to={primaryBrowseTo}
+            onClick={() => setOpen(false)}
+            className="block py-2 text-sm font-medium text-muted-foreground"
+          >
+            {primaryBrowseLabel}
+          </Link>
+          {shopSlug ? (
+            <Link to="/shops" onClick={() => setOpen(false)} className="block py-2 text-sm font-medium text-muted-foreground">
+              All Shops
+            </Link>
+          ) : null}
           {isLoggedIn && !isAdmin && (
             <Link to="/customer/dashboard" onClick={() => setOpen(false)} className="block py-2 text-sm font-medium text-muted-foreground">My Appointments</Link>
           )}

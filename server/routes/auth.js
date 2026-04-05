@@ -2,11 +2,11 @@ const express = require("express");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const prisma = require("../lib/prisma");
+const { allocateUniqueShopSlug } = require("../lib/shopSlugFromName");
 const { requireAuth, loadCurrentUser } = require("../middleware/auth");
 
 const router = express.Router();
 const SALT_ROUNDS = 12;
-const SHOP_SLUG_REGEX = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 function getJwtSecret() {
   return process.env.JWT_SECRET;
@@ -73,36 +73,35 @@ router.post("/register", async (req, res) => {
 
 router.post("/shop-register", async (req, res) => {
   try {
-    const { name, email, password, shopName, shopSlug } = req.body;
-    if (!name || !email || !password || !shopName || !shopSlug) {
+    const { name, email, password, shopName, serviceCategory } = req.body;
+    if (!name || !email || !password || !shopName) {
       return res.status(400).json({
         success: false,
-        error: "name, email, password, shopName and shopSlug are required",
+        error: "name, email, password and shopName are required",
       });
     }
 
-    if (!SHOP_SLUG_REGEX.test(shopSlug)) {
-      return res.status(400).json({
-        success: false,
-        error: "shopSlug must be lowercase and hyphen-separated only",
-      });
+    const trimmedShopName = String(shopName).trim();
+    if (!trimmedShopName) {
+      return res.status(400).json({ success: false, error: "shopName cannot be empty" });
     }
 
-    const [existingEmailUser, existingSlugShop] = await Promise.all([
-      prisma.user.findUnique({ where: { email } }),
-      prisma.shop.findUnique({ where: { slug: shopSlug } }),
-    ]);
+    const categoryTrimmed =
+      serviceCategory != null && String(serviceCategory).trim() !== ""
+        ? String(serviceCategory).trim()
+        : null;
+
+    const existingEmailUser = await prisma.user.findUnique({ where: { email } });
 
     if (existingEmailUser) {
       return res.status(409).json({ success: false, error: "Email already in use" });
-    }
-    if (existingSlugShop) {
-      return res.status(409).json({ success: false, error: "Shop slug already exists" });
     }
 
     const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
 
     const result = await prisma.$transaction(async (tx) => {
+      const slug = await allocateUniqueShopSlug(tx, trimmedShopName);
+
       const user = await tx.user.create({
         data: {
           name,
@@ -114,8 +113,9 @@ router.post("/shop-register", async (req, res) => {
 
       const shop = await tx.shop.create({
         data: {
-          name: shopName,
-          slug: shopSlug,
+          name: trimmedShopName,
+          slug,
+          serviceCategory: categoryTrimmed,
           ownerId: user.id,
         },
       });
