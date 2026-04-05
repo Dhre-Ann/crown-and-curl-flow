@@ -61,12 +61,14 @@ export default function Landing() {
               <Link to="/shops" className="btn-gold inline-flex items-center gap-2">
                 Browse shops <ArrowRight className="w-4 h-4" />
               </Link>
-              <Link
-                to={shopSlug ? withShopSearch("/services") : "/shops"}
-                className="btn-outline-warm !border-cream !text-cream hover:!bg-cream/10"
-              >
-                View styles
-              </Link>
+              {shopSlug ? (
+                <Link
+                  to={withShopSearch("/services")}
+                  className="btn-outline-warm !border-cream !text-cream hover:!bg-cream/10"
+                >
+                  View styles
+                </Link>
+              ) : null}
             </div>
           </div>
         </div>

@@ -22,6 +22,9 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    # So the same secret works whether it is stored under Repository secrets or the github-pages Environment.
+    environment:
+      name: github-pages
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
@@ -29,15 +32,33 @@ jobs:
           node-version: "22"
           cache: npm
       - run: npm ci
-      # Without VITE_API_BASE_URL, the bundle uses localhost — login/API only works after you add the secret and redeploy.
+      # Writes public/api-runtime-config.js so the live site always gets the API URL even if the Vite env embed failed.
+      - name: Inject API URL for static hosting
+        env:
+          VITE_API_BASE_URL: ${{ secrets.VITE_API_BASE_URL }}
+        run: |
+          node <<'NODE'
+          const fs = require("fs");
+          const u = (process.env.VITE_API_BASE_URL || "").trim().replace(/\/$/, "");
+          const lines = [
+            "/** Auto-generated in GitHub Actions — do not commit secrets here. */",
+            u
+              ? `window.__CROWN_STUDIO_API_BASE__ = ${JSON.stringify(u)};`
+              : `window.__CROWN_STUDIO_API_BASE__ = "";`,
+            "",
+          ];
+          fs.mkdirSync("public", { recursive: true });
+          fs.writeFileSync("public/api-runtime-config.js", lines.join("\n"), "utf8");
+          if (!u) {
+            console.log("::warning::VITE_API_BASE_URL is empty — Browse shops / API calls will fail on Pages until you add the repository or github-pages environment secret.");
+          }
+          NODE
       - name: Check VITE_API_BASE_URL secret
         env:
           VITE_API_BASE_URL: ${{ secrets.VITE_API_BASE_URL }}
         run: |
           if [ -z "$VITE_API_BASE_URL" ]; then
-            echo "::error::VITE_API_BASE_URL is empty. Add a Repository secret (Settings → Secrets and variables → Actions → New repository secret). Environment-only secrets are NOT visible to this build job. Value example: https://crown-and-curl-flow.onrender.com (no trailing slash)."
-          else
-            echo "VITE_API_BASE_URL is set for this build (value not shown)."
+            echo "::warning::VITE_API_BASE_URL is not set. Add it under Settings → Secrets → Actions (repository) OR under the github-pages environment. Set CORS_ORIGINS on Render to your Pages origin (e.g. https://YOUR_USER.github.io)."
           fi
       - name: Build static site
         env:

@@ -1,28 +1,16 @@
 import type { CatalogStyle, StyleCustomizationOption } from "@/types/style";
 
-declare global {
-  interface Window {
-    /** Emergency override on GitHub Pages: set before app loads in a small inline script. */
-    __CROWN_STUDIO_API_BASE__?: string;
-  }
-}
-
 const TOKEN_KEY = "crownStudioToken";
 
 /**
- * Resolves the API origin at runtime (Pages-friendly): window override → meta tag (injected at build) → Vite env → localhost.
- * Use a repository Actions secret `VITE_API_BASE_URL` (not an Environment-only secret) so the build step receives it.
+ * API origin: runtime script (GitHub Pages) → Vite env (build) → local dev default.
+ * On Pages, `public/api-runtime-config.js` must set window.__CROWN_STUDIO_API_BASE__ if the bundle was built without the secret.
  */
 export function getApiBaseUrl(): string {
   if (typeof window !== "undefined") {
-    const fromWindow = window.__CROWN_STUDIO_API_BASE__;
-    if (typeof fromWindow === "string" && fromWindow.trim() !== "") {
-      return fromWindow.trim().replace(/\/$/, "");
-    }
-    const meta = document.querySelector('meta[name="crown-studio-api-base"]');
-    const fromMeta = meta?.getAttribute("content")?.trim();
-    if (fromMeta) {
-      return fromMeta.replace(/\/$/, "");
+    const r = window.__CROWN_STUDIO_API_BASE__;
+    if (typeof r === "string" && r.trim() !== "") {
+      return r.trim().replace(/\/$/, "");
     }
   }
   const envApi = import.meta.env.VITE_API_BASE_URL;
@@ -323,26 +311,28 @@ function appendShopSlugQuery(path: string): string {
 }
 
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  const base = getApiBaseUrl();
   const pathWithShop = appendShopSlugQuery(path);
-  const url = `${base}${pathWithShop}`;
-  const response = await fetch(url, {
+  const base = getApiBaseUrl();
+  const response = await fetch(`${base}${pathWithShop}`, {
     method: options.method ?? "GET",
     headers: buildHeaders(options.auth ?? false),
     body: options.body ? JSON.stringify(options.body) : undefined,
   });
 
-  const raw = await response.text();
+  const text = await response.text();
+  const trimmed = text.trimStart();
+  const looksLikeHtml = trimmed.startsWith("<") || trimmed.startsWith("<!DOCTYPE");
+  if (looksLikeHtml) {
+    throw new Error(
+      'Received a web page instead of API data. GitHub Pages only serves static files — set repository secret VITE_API_BASE_URL to your real API (https://…onrender.com), not your Pages site URL. Use Settings → Secrets and variables → Actions (repository secret). Or set window.__CROWN_STUDIO_API_BASE__ in public/api-runtime-config.js before deploy.'
+    );
+  }
 
   let payload: ApiResponse<T>;
   try {
-    payload = JSON.parse(raw) as ApiResponse<T>;
+    payload = JSON.parse(text) as ApiResponse<T>;
   } catch {
-    const hint =
-      raw.trimStart().startsWith("<!") || raw.trimStart().toLowerCase().startsWith("<html")
-        ? "Received a web page instead of API data. GitHub Pages only serves static files — set repository secret VITE_API_BASE_URL to your real API (https://…onrender.com), not your Pages site URL. Use Settings → Secrets and variables → Actions (repository secret). Or set window.__CROWN_STUDIO_API_BASE__ before the app loads."
-        : `Could not parse JSON from ${url}.`;
-    throw new Error(hint);
+    throw new Error("API returned invalid JSON. Check VITE_API_BASE_URL / api-runtime-config.js points to your API server.");
   }
 
   if (!response.ok || !payload.success) {
