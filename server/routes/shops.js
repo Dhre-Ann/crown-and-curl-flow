@@ -28,9 +28,7 @@ router.get("/", async (req, res) => {
       success: true,
       data: { shops },
     });
-  } catch (err) {
-    // eslint-disable-next-line no-console
-    console.error("GET /api/shops", err);
+  } catch {
     return res.status(500).json({ success: false, error: "Failed to list shops" });
   }
 });

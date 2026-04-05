@@ -1,11 +1,30 @@
 import type { CatalogStyle, StyleCustomizationOption } from "@/types/style";
 
-const envApi = import.meta.env.VITE_API_BASE_URL;
-const API_BASE_URL =
-  typeof envApi === "string" && envApi.trim() !== ""
-    ? envApi.replace(/\/$/, "")
-    : "http://localhost:5000";
 const TOKEN_KEY = "crownStudioToken";
+
+/**
+ * Resolves the backend base URL at request time (not module load) so GitHub Pages can use
+ * `window.__CROWN_STUDIO_API_BASE__` without a rebuild. Static hosts have no /api — never use the Pages origin as API.
+ */
+export function getApiBaseUrl(): string {
+  const envRaw = import.meta.env.VITE_API_BASE_URL;
+  const envTrimmed = typeof envRaw === "string" ? envRaw.trim() : "";
+  if (envTrimmed.startsWith("https://") || envTrimmed.startsWith("http://")) {
+    return envTrimmed.replace(/\/$/, "");
+  }
+
+  if (typeof window !== "undefined") {
+    const rt = window.__CROWN_STUDIO_API_BASE__;
+    if (typeof rt === "string") {
+      const t = rt.trim();
+      if (t.startsWith("https://") || t.startsWith("http://")) {
+        return t.replace(/\/$/, "");
+      }
+    }
+  }
+
+  return "http://localhost:5000";
+}
 
 /**
  * Hosts where the leftmost DNS label is NOT a Crown shop slug (e.g. GitHub Pages is user.github.io).
@@ -243,6 +262,39 @@ interface ApiFailure {
 
 type ApiResponse<T> = ApiSuccess<T> | ApiFailure;
 
+function pagesLooksLikeWrongApiTarget(url: string): boolean {
+  if (typeof window === "undefined") {
+    return false;
+  }
+  try {
+    const api = new URL(url);
+    const page = window.location;
+    if (!page.hostname.endsWith("github.io") && !page.hostname.endsWith("githubusercontent.com")) {
+      return false;
+    }
+    return api.origin === page.origin;
+  } catch {
+    return false;
+  }
+}
+
+async function readApiJson<T>(response: Response): Promise<ApiResponse<T>> {
+  const text = await response.text();
+  const trimmed = text.trimStart();
+  if (trimmed.startsWith("<!") || trimmed.startsWith("<html")) {
+    const hint =
+      typeof window !== "undefined" && window.location.hostname.endsWith("github.io")
+        ? " GitHub Pages only serves static files — set repository secret VITE_API_BASE_URL (or window.__CROWN_STUDIO_API_BASE__) to your real API URL (https://…), not this site."
+        : " Check VITE_API_BASE_URL points to your JSON API, not a static site.";
+    throw new Error(`Received a web page instead of API data.${hint}`);
+  }
+  try {
+    return JSON.parse(text) as ApiResponse<T>;
+  } catch {
+    throw new Error("Invalid response from server (not JSON).");
+  }
+}
+
 type RequestOptions = {
   method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   body?: unknown;
@@ -299,13 +351,22 @@ function appendShopSlugQuery(path: string): string {
 
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const pathWithShop = appendShopSlugQuery(path);
-  const response = await fetch(`${API_BASE_URL}${pathWithShop}`, {
+  const base = getApiBaseUrl();
+  const url = `${base}${pathWithShop}`;
+
+  if (pagesLooksLikeWrongApiTarget(url)) {
+    throw new Error(
+      "VITE_API_BASE_URL points at this GitHub Pages site. It must be your separate API server (https://…), e.g. Railway or Render."
+    );
+  }
+
+  const response = await fetch(url, {
     method: options.method ?? "GET",
     headers: buildHeaders(options.auth ?? false),
     body: options.body ? JSON.stringify(options.body) : undefined,
   });
 
-  const payload = (await response.json()) as ApiResponse<T>;
+  const payload = await readApiJson<T>(response);
   if (!response.ok || !payload.success) {
     if (payload.success === false) {
       throw new Error(payload.error);

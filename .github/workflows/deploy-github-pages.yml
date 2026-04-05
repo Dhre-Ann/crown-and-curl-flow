@@ -29,17 +29,17 @@ jobs:
           node-version: "22"
           cache: npm
       - run: npm ci
-      # Without VITE_API_BASE_URL, the bundle uses localhost — login/API only works after you add the secret and redeploy.
-      - name: Check VITE_API_BASE_URL secret
+      # Pages serves only static files — API calls must go to a separate backend (secret or Actions variable).
+      - name: Check VITE_API_BASE_URL
         env:
-          VITE_API_BASE_URL: ${{ secrets.VITE_API_BASE_URL }}
+          VITE_API_BASE_URL: ${{ secrets.VITE_API_BASE_URL || vars.VITE_API_BASE_URL }}
         run: |
           if [ -z "$VITE_API_BASE_URL" ]; then
-            echo "::warning::VITE_API_BASE_URL is not set. The site will call http://localhost:5000 (API will not work on GitHub Pages). Add the repository secret with your HTTPS API base URL and set CORS_ORIGINS on the API to https://dhre-ann.github.io"
+            echo "::warning::VITE_API_BASE_URL is not set. The bundle defaults to http://localhost:5000; GitHub Pages users will not reach your API. Add repository secret or variable VITE_API_BASE_URL with your HTTPS API origin (not the github.io Pages URL). Set server CORS_ORIGINS to your Pages origin."
           fi
       - name: Build static site
         env:
-          VITE_API_BASE_URL: ${{ secrets.VITE_API_BASE_URL }}
+          VITE_API_BASE_URL: ${{ secrets.VITE_API_BASE_URL || vars.VITE_API_BASE_URL }}
         run: |
           npx vite build --base /${{ github.event.repository.name }}/
           node -e "require('fs').copyFileSync('dist/index.html','dist/404.html')"
