@@ -29,17 +29,17 @@ jobs:
           node-version: "22"
           cache: npm
       - run: npm ci
-      # Pages serves only static files — API calls must go to a separate backend (secret or Actions variable).
-      - name: Check VITE_API_BASE_URL
+      # VITE_API_BASE_URL must be your real API host (https://…), not the GitHub Pages site URL — otherwise fetches return HTML and the app shows a configuration error.
+      - name: Check VITE_API_BASE_URL secret
         env:
-          VITE_API_BASE_URL: ${{ secrets.VITE_API_BASE_URL || vars.VITE_API_BASE_URL }}
+          VITE_API_BASE_URL: ${{ secrets.VITE_API_BASE_URL }}
         run: |
           if [ -z "$VITE_API_BASE_URL" ]; then
-            echo "::warning::VITE_API_BASE_URL is not set. The bundle defaults to http://localhost:5000; GitHub Pages users will not reach your API. Add repository secret or variable VITE_API_BASE_URL with your HTTPS API origin (not the github.io Pages URL). Set server CORS_ORIGINS to your Pages origin."
+            echo "::warning::VITE_API_BASE_URL is not set. The deployed app will show an error on github.io until you add this repository secret (HTTPS API base, no trailing slash) and redeploy. Set CORS_ORIGINS on the API to your Pages origin. Alternatively set window.__CROWN_STUDIO_API_BASE__ in index.html."
           fi
       - name: Build static site
         env:
-          VITE_API_BASE_URL: ${{ secrets.VITE_API_BASE_URL || vars.VITE_API_BASE_URL }}
+          VITE_API_BASE_URL: ${{ secrets.VITE_API_BASE_URL }}
         run: |
           npx vite build --base /${{ github.event.repository.name }}/
           node -e "require('fs').copyFileSync('dist/index.html','dist/404.html')"

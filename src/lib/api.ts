@@ -2,29 +2,11 @@ import type { CatalogStyle, StyleCustomizationOption } from "@/types/style";
 
 const TOKEN_KEY = "crownStudioToken";
 
-/**
- * Resolves the backend base URL at request time (not module load) so GitHub Pages can use
- * `window.__CROWN_STUDIO_API_BASE__` without a rebuild. Static hosts have no /api — never use the Pages origin as API.
- */
-export function getApiBaseUrl(): string {
-  const envRaw = import.meta.env.VITE_API_BASE_URL;
-  const envTrimmed = typeof envRaw === "string" ? envRaw.trim() : "";
-  if (envTrimmed.startsWith("https://") || envTrimmed.startsWith("http://")) {
-    return envTrimmed.replace(/\/$/, "");
-  }
+const HTML_INSTEAD_OF_JSON_MESSAGE =
+  "Received a web page instead of API data. GitHub Pages only serves static files — set repository secret VITE_API_BASE_URL (or window.__CROWN_STUDIO_API_BASE__) to your real API URL (https://…), not this site.";
 
-  if (typeof window !== "undefined") {
-    const rt = window.__CROWN_STUDIO_API_BASE__;
-    if (typeof rt === "string") {
-      const t = rt.trim();
-      if (t.startsWith("https://") || t.startsWith("http://")) {
-        return t.replace(/\/$/, "");
-      }
-    }
-  }
-
-  return "http://localhost:5000";
-}
+const MISSING_API_BASE_URL_MESSAGE =
+  "No API URL configured for this host. Add GitHub repository secret VITE_API_BASE_URL with your HTTPS API base (no trailing slash), redeploy, or set window.__CROWN_STUDIO_API_BASE__ in index.html before the app loads.";
 
 /**
  * Hosts where the leftmost DNS label is NOT a Crown shop slug (e.g. GitHub Pages is user.github.io).
@@ -43,6 +25,59 @@ const HOSTS_FIRST_LABEL_IS_NOT_SHOP_SLUG = [
 function isManagedOrPagesHostname(hostname: string): boolean {
   const h = hostname.toLowerCase();
   return HOSTS_FIRST_LABEL_IS_NOT_SHOP_SLUG.some((suffix) => h === suffix || h.endsWith(`.${suffix}`));
+}
+
+function readWindowApiOverride(): string | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+  const w = window.__CROWN_STUDIO_API_BASE__;
+  if (typeof w !== "string" || !w.trim()) {
+    return null;
+  }
+  return w.trim().replace(/\/$/, "");
+}
+
+function readViteApiBase(): string | null {
+  const envApi = import.meta.env.VITE_API_BASE_URL;
+  if (typeof envApi !== "string" || !envApi.trim()) {
+    return null;
+  }
+  return envApi.trim().replace(/\/$/, "");
+}
+
+/**
+ * API origin: runtime override (Pages) → build env → localhost (local dev only).
+ * On static hosts (e.g. github.io), refuses same-origin URLs (common misconfiguration).
+ */
+function getApiBaseUrl(): string {
+  const win = readWindowApiOverride();
+  if (win) {
+    return win;
+  }
+
+  const vite = readViteApiBase();
+  const isBrowser = typeof window !== "undefined";
+  const host = isBrowser ? window.location.hostname : "";
+
+  if (vite) {
+    if (isBrowser && isManagedOrPagesHostname(host)) {
+      try {
+        if (new URL(vite).origin === window.location.origin) {
+          return "";
+        }
+      } catch {
+        return "";
+      }
+    }
+    return vite;
+  }
+
+  if (isBrowser && isManagedOrPagesHostname(host)) {
+    return "";
+  }
+
+  return "http://localhost:5000";
 }
 
 /**
@@ -262,39 +297,6 @@ interface ApiFailure {
 
 type ApiResponse<T> = ApiSuccess<T> | ApiFailure;
 
-function pagesLooksLikeWrongApiTarget(url: string): boolean {
-  if (typeof window === "undefined") {
-    return false;
-  }
-  try {
-    const api = new URL(url);
-    const page = window.location;
-    if (!page.hostname.endsWith("github.io") && !page.hostname.endsWith("githubusercontent.com")) {
-      return false;
-    }
-    return api.origin === page.origin;
-  } catch {
-    return false;
-  }
-}
-
-async function readApiJson<T>(response: Response): Promise<ApiResponse<T>> {
-  const text = await response.text();
-  const trimmed = text.trimStart();
-  if (trimmed.startsWith("<!") || trimmed.startsWith("<html")) {
-    const hint =
-      typeof window !== "undefined" && window.location.hostname.endsWith("github.io")
-        ? " GitHub Pages only serves static files — set repository secret VITE_API_BASE_URL (or window.__CROWN_STUDIO_API_BASE__) to your real API URL (https://…), not this site."
-        : " Check VITE_API_BASE_URL points to your JSON API, not a static site.";
-    throw new Error(`Received a web page instead of API data.${hint}`);
-  }
-  try {
-    return JSON.parse(text) as ApiResponse<T>;
-  } catch {
-    throw new Error("Invalid response from server (not JSON).");
-  }
-}
-
 type RequestOptions = {
   method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   body?: unknown;
@@ -350,23 +352,35 @@ function appendShopSlugQuery(path: string): string {
 }
 
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  const pathWithShop = appendShopSlugQuery(path);
   const base = getApiBaseUrl();
-  const url = `${base}${pathWithShop}`;
-
-  if (pagesLooksLikeWrongApiTarget(url)) {
-    throw new Error(
-      "VITE_API_BASE_URL points at this GitHub Pages site. It must be your separate API server (https://…), e.g. Railway or Render."
-    );
+  if (!base) {
+    throw new Error(MISSING_API_BASE_URL_MESSAGE);
   }
 
-  const response = await fetch(url, {
+  const pathWithShop = appendShopSlugQuery(path);
+  const response = await fetch(`${base}${pathWithShop}`, {
     method: options.method ?? "GET",
     headers: buildHeaders(options.auth ?? false),
     body: options.body ? JSON.stringify(options.body) : undefined,
   });
 
-  const payload = await readApiJson<T>(response);
+  const raw = await response.text();
+  let payload: ApiResponse<T>;
+  try {
+    payload = (raw ? JSON.parse(raw) : null) as ApiResponse<T>;
+  } catch {
+    const looksHtml =
+      /^\s*</.test(raw) && /<\s*html[\s>]/i.test(raw.slice(0, Math.min(raw.length, 500)));
+    if (looksHtml || (response.headers.get("content-type") || "").includes("text/html")) {
+      throw new Error(HTML_INSTEAD_OF_JSON_MESSAGE);
+    }
+    throw new Error("Invalid response from API (not JSON).");
+  }
+
+  if (typeof payload !== "object" || payload === null || !("success" in payload)) {
+    throw new Error(HTML_INSTEAD_OF_JSON_MESSAGE);
+  }
+
   if (!response.ok || !payload.success) {
     if (payload.success === false) {
       throw new Error(payload.error);
