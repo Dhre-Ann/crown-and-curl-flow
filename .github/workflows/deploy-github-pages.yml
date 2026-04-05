@@ -29,13 +29,15 @@ jobs:
           node-version: "22"
           cache: npm
       - run: npm ci
-      # VITE_API_BASE_URL must be your real API host (https://…), not the GitHub Pages site URL — otherwise fetches return HTML and the app shows a configuration error.
+      # Without VITE_API_BASE_URL, the bundle uses localhost — login/API only works after you add the secret and redeploy.
       - name: Check VITE_API_BASE_URL secret
         env:
           VITE_API_BASE_URL: ${{ secrets.VITE_API_BASE_URL }}
         run: |
           if [ -z "$VITE_API_BASE_URL" ]; then
-            echo "::warning::VITE_API_BASE_URL is not set. The deployed app will show an error on github.io until you add this repository secret (HTTPS API base, no trailing slash) and redeploy. Set CORS_ORIGINS on the API to your Pages origin. Alternatively set window.__CROWN_STUDIO_API_BASE__ in index.html."
+            echo "::error::VITE_API_BASE_URL is empty. Add a Repository secret (Settings → Secrets and variables → Actions → New repository secret). Environment-only secrets are NOT visible to this build job. Value example: https://crown-and-curl-flow.onrender.com (no trailing slash)."
+          else
+            echo "VITE_API_BASE_URL is set for this build (value not shown)."
           fi
       - name: Build static site
         env:

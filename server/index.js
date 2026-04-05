@@ -16,7 +16,33 @@ const extraOrigins = process.env.CORS_ORIGINS
   ? process.env.CORS_ORIGINS.split(",").map((o) => o.trim()).filter(Boolean)
   : [];
 const allowedOrigins = [...defaultOrigins, ...extraOrigins];
-app.use(cors({ origin: allowedOrigins }));
+
+function isGitHubPagesOrigin(origin) {
+  if (!origin || typeof origin !== "string") {
+    return false;
+  }
+  try {
+    const u = new URL(origin);
+    return u.protocol === "https:" && !u.port && /\.github\.io$/i.test(u.hostname);
+  } catch {
+    return false;
+  }
+}
+
+// Allow explicit CORS_ORIGINS plus any https://*.github.io (user/org Pages) so Render works without env churn.
+app.use(
+  cors({
+    origin(origin, callback) {
+      if (!origin) {
+        return callback(null, true);
+      }
+      if (allowedOrigins.includes(origin) || isGitHubPagesOrigin(origin)) {
+        return callback(null, true);
+      }
+      callback(null, false);
+    },
+  })
+);
 app.use(express.json());
 
 // Resolve optional shop tenant from header/query before route handlers (req.shop or null).

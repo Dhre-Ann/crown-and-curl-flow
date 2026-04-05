@@ -14,12 +14,12 @@
 
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:image" content="/og-image.png" />
+    <!-- Build injects your Render/API URL here for GitHub Pages (see vite.config.ts). Override at runtime: window.__CROWN_STUDIO_API_BASE__ -->
+    <meta name="crown-studio-api-base" content="" />
   </head>
 
   <body>
     <div id="root"></div>
-    <!-- GitHub Pages: if you cannot use repo secret VITE_API_BASE_URL at build time, set your API origin here (HTTPS, no trailing slash). Must run before the module below. -->
-    <!-- <script>window.__CROWN_STUDIO_API_BASE__ = "https://your-api.example.com";</script> -->
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

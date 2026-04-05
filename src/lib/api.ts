@@ -1,12 +1,36 @@
 import type { CatalogStyle, StyleCustomizationOption } from "@/types/style";
 
+declare global {
+  interface Window {
+    /** Emergency override on GitHub Pages: set before app loads in a small inline script. */
+    __CROWN_STUDIO_API_BASE__?: string;
+  }
+}
+
 const TOKEN_KEY = "crownStudioToken";
 
-const HTML_INSTEAD_OF_JSON_MESSAGE =
-  "Received a web page instead of API data. GitHub Pages only serves static files — set repository secret VITE_API_BASE_URL (or window.__CROWN_STUDIO_API_BASE__) to your real API URL (https://…), not this site.";
-
-const MISSING_API_BASE_URL_MESSAGE =
-  "No API URL configured for this host. Add GitHub repository secret VITE_API_BASE_URL with your HTTPS API base (no trailing slash), redeploy, or set window.__CROWN_STUDIO_API_BASE__ in index.html before the app loads.";
+/**
+ * Resolves the API origin at runtime (Pages-friendly): window override → meta tag (injected at build) → Vite env → localhost.
+ * Use a repository Actions secret `VITE_API_BASE_URL` (not an Environment-only secret) so the build step receives it.
+ */
+export function getApiBaseUrl(): string {
+  if (typeof window !== "undefined") {
+    const fromWindow = window.__CROWN_STUDIO_API_BASE__;
+    if (typeof fromWindow === "string" && fromWindow.trim() !== "") {
+      return fromWindow.trim().replace(/\/$/, "");
+    }
+    const meta = document.querySelector('meta[name="crown-studio-api-base"]');
+    const fromMeta = meta?.getAttribute("content")?.trim();
+    if (fromMeta) {
+      return fromMeta.replace(/\/$/, "");
+    }
+  }
+  const envApi = import.meta.env.VITE_API_BASE_URL;
+  if (typeof envApi === "string" && envApi.trim() !== "") {
+    return envApi.replace(/\/$/, "");
+  }
+  return "http://localhost:5000";
+}
 
 /**
  * Hosts where the leftmost DNS label is NOT a Crown shop slug (e.g. GitHub Pages is user.github.io).
@@ -25,59 +49,6 @@ const HOSTS_FIRST_LABEL_IS_NOT_SHOP_SLUG = [
 function isManagedOrPagesHostname(hostname: string): boolean {
   const h = hostname.toLowerCase();
   return HOSTS_FIRST_LABEL_IS_NOT_SHOP_SLUG.some((suffix) => h === suffix || h.endsWith(`.${suffix}`));
-}
-
-function readWindowApiOverride(): string | null {
-  if (typeof window === "undefined") {
-    return null;
-  }
-  const w = window.__CROWN_STUDIO_API_BASE__;
-  if (typeof w !== "string" || !w.trim()) {
-    return null;
-  }
-  return w.trim().replace(/\/$/, "");
-}
-
-function readViteApiBase(): string | null {
-  const envApi = import.meta.env.VITE_API_BASE_URL;
-  if (typeof envApi !== "string" || !envApi.trim()) {
-    return null;
-  }
-  return envApi.trim().replace(/\/$/, "");
-}
-
-/**
- * API origin: runtime override (Pages) → build env → localhost (local dev only).
- * On static hosts (e.g. github.io), refuses same-origin URLs (common misconfiguration).
- */
-function getApiBaseUrl(): string {
-  const win = readWindowApiOverride();
-  if (win) {
-    return win;
-  }
-
-  const vite = readViteApiBase();
-  const isBrowser = typeof window !== "undefined";
-  const host = isBrowser ? window.location.hostname : "";
-
-  if (vite) {
-    if (isBrowser && isManagedOrPagesHostname(host)) {
-      try {
-        if (new URL(vite).origin === window.location.origin) {
-          return "";
-        }
-      } catch {
-        return "";
-      }
-    }
-    return vite;
-  }
-
-  if (isBrowser && isManagedOrPagesHostname(host)) {
-    return "";
-  }
-
-  return "http://localhost:5000";
 }
 
 /**
@@ -353,32 +324,25 @@ function appendShopSlugQuery(path: string): string {
 
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const base = getApiBaseUrl();
-  if (!base) {
-    throw new Error(MISSING_API_BASE_URL_MESSAGE);
-  }
-
   const pathWithShop = appendShopSlugQuery(path);
-  const response = await fetch(`${base}${pathWithShop}`, {
+  const url = `${base}${pathWithShop}`;
+  const response = await fetch(url, {
     method: options.method ?? "GET",
     headers: buildHeaders(options.auth ?? false),
     body: options.body ? JSON.stringify(options.body) : undefined,
   });
 
   const raw = await response.text();
+
   let payload: ApiResponse<T>;
   try {
-    payload = (raw ? JSON.parse(raw) : null) as ApiResponse<T>;
+    payload = JSON.parse(raw) as ApiResponse<T>;
   } catch {
-    const looksHtml =
-      /^\s*</.test(raw) && /<\s*html[\s>]/i.test(raw.slice(0, Math.min(raw.length, 500)));
-    if (looksHtml || (response.headers.get("content-type") || "").includes("text/html")) {
-      throw new Error(HTML_INSTEAD_OF_JSON_MESSAGE);
-    }
-    throw new Error("Invalid response from API (not JSON).");
-  }
-
-  if (typeof payload !== "object" || payload === null || !("success" in payload)) {
-    throw new Error(HTML_INSTEAD_OF_JSON_MESSAGE);
+    const hint =
+      raw.trimStart().startsWith("<!") || raw.trimStart().toLowerCase().startsWith("<html")
+        ? "Received a web page instead of API data. GitHub Pages only serves static files — set repository secret VITE_API_BASE_URL to your real API (https://…onrender.com), not your Pages site URL. Use Settings → Secrets and variables → Actions (repository secret). Or set window.__CROWN_STUDIO_API_BASE__ before the app loads."
+        : `Could not parse JSON from ${url}.`;
+    throw new Error(hint);
   }
 
   if (!response.ok || !payload.success) {
