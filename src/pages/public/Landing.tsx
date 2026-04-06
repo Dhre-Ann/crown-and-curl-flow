@@ -1,13 +1,16 @@
 import { useEffect, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
+import { useAuth } from "@/context/AuthContext";
 import { fetchStylesCatalog, getShopSlug, withShopSearch } from "@/lib/api";
 import type { CatalogStyle } from "@/types/style";
 import { mockReviews } from "@/data/mockReviews";
 import { formatStyleDuration, stylePrimaryImageUrl } from "@/lib/styleDisplay";
-import { Star, ArrowRight, Clock, Sparkles, Calendar } from "lucide-react";
+import { Star, ArrowRight, Clock, Sparkles, Calendar, LayoutDashboard } from "lucide-react";
 import heroImage from "@/assets/hero-braids.jpg";
 
 export default function Landing() {
+  const { user } = useAuth();
+  const isShopAdmin = user?.role === "shop_admin";
   const location = useLocation();
   const [featuredStyles, setFeaturedStyles] = useState<CatalogStyle[]>([]);
   const featuredReviews = mockReviews
@@ -19,8 +22,14 @@ export default function Landing() {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      if (!getShopSlug()) {
+      if (isShopAdmin) {
         if (!cancelled) setFeaturedStyles([]);
+        return;
+      }
+      if (!getShopSlug()) {
+        if (!cancelled) {
+          setFeaturedStyles([]);
+        }
         return;
       }
       try {
@@ -33,7 +42,7 @@ export default function Landing() {
     return () => {
       cancelled = true;
     };
-  }, [shopSlug, location.search]);
+  }, [shopSlug, location.search, isShopAdmin]);
 
   return (
     <div>
@@ -58,17 +67,26 @@ export default function Landing() {
               Premium braiding & protective styling, rooted in culture and elevated by expert craftsmanship.
             </p>
             <div className="flex flex-wrap gap-4">
-              <Link to="/shops" className="btn-gold inline-flex items-center gap-2">
-                Browse shops <ArrowRight className="w-4 h-4" />
-              </Link>
-              {shopSlug ? (
-                <Link
-                  to={withShopSearch("/services")}
-                  className="btn-outline-warm !border-cream !text-cream hover:!bg-cream/10"
-                >
-                  View styles
+              {isShopAdmin ? (
+                <Link to="/admin" className="btn-gold inline-flex items-center gap-2">
+                  <LayoutDashboard className="w-4 h-4" />
+                  Open dashboard
                 </Link>
-              ) : null}
+              ) : (
+                <>
+                  <Link to="/shops" className="btn-gold inline-flex items-center gap-2">
+                    Browse shops <ArrowRight className="w-4 h-4" />
+                  </Link>
+                  {shopSlug ? (
+                    <Link
+                      to={withShopSearch("/services")}
+                      className="btn-outline-warm !border-cream !text-cream hover:!bg-cream/10"
+                    >
+                      View styles
+                    </Link>
+                  ) : null}
+                </>
+              )}
             </div>
           </div>
         </div>
@@ -97,62 +115,77 @@ export default function Landing() {
         </div>
       </section>
 
-      <section className="section-padding">
-        <div className="container mx-auto">
-          <div className="flex items-end justify-between mb-10">
-            <h2 className="heading-display text-3xl sm:text-4xl font-bold">
-              Featured <span className="text-gold-gradient">Styles</span>
-            </h2>
-            {shopSlug ? (
-              <Link
-                to={withShopSearch("/services")}
-                className="text-accent font-medium text-sm flex items-center gap-1 hover:gap-2 transition-all"
-              >
-                View all <ArrowRight className="w-4 h-4" />
-              </Link>
-            ) : (
-              <Link
-                to="/shops"
-                className="text-accent font-medium text-sm flex items-center gap-1 hover:gap-2 transition-all"
-              >
-                Pick a shop <ArrowRight className="w-4 h-4" />
-              </Link>
-            )}
-          </div>
-          {!shopSlug ? (
-            <p className="text-center text-muted-foreground max-w-md mx-auto">
-              Choose a shop to see their styles here, or open{" "}
-              <Link to="/shops" className="text-accent underline">
-                Browse shops
-              </Link>
-              .
-            </p>
-          ) : null}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            {featuredStyles.map((style) => (
-              <Link key={style.id} to={withShopSearch(`/services/${style.id}`)} className="card-warm group">
-                <div className="aspect-[3/4] overflow-hidden">
-                  <img
-                    src={stylePrimaryImageUrl(style)}
-                    alt={style.name}
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                    loading="lazy"
-                    width={800}
-                    height={1024}
-                  />
-                </div>
-                <div className="p-4">
-                  <h3 className="font-display text-lg font-semibold">{style.name}</h3>
-                  <div className="flex items-center justify-between mt-1">
-                    <span className="text-accent font-bold">${style.basePrice}+</span>
-                    <span className="text-xs text-muted-foreground">{formatStyleDuration(style)}</span>
+      {!isShopAdmin ? (
+        <section className="section-padding">
+          <div className="container mx-auto">
+            <div className="flex items-end justify-between mb-10">
+              <h2 className="heading-display text-3xl sm:text-4xl font-bold">
+                Featured <span className="text-gold-gradient">Styles</span>
+              </h2>
+              {shopSlug ? (
+                <Link
+                  to={withShopSearch("/services")}
+                  className="text-accent font-medium text-sm flex items-center gap-1 hover:gap-2 transition-all"
+                >
+                  View all <ArrowRight className="w-4 h-4" />
+                </Link>
+              ) : (
+                <Link
+                  to="/shops"
+                  className="text-accent font-medium text-sm flex items-center gap-1 hover:gap-2 transition-all"
+                >
+                  Pick a shop <ArrowRight className="w-4 h-4" />
+                </Link>
+              )}
+            </div>
+            {!shopSlug ? (
+              <p className="text-center text-muted-foreground max-w-md mx-auto">
+                Choose a shop to see their styles here, or open{" "}
+                <Link to="/shops" className="text-accent underline">
+                  Browse shops
+                </Link>
+                .
+              </p>
+            ) : null}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+              {featuredStyles.map((style) => (
+                <Link key={style.id} to={withShopSearch(`/services/${style.id}`)} className="card-warm group">
+                  <div className="aspect-[3/4] overflow-hidden">
+                    <img
+                      src={stylePrimaryImageUrl(style)}
+                      alt={style.name}
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                      loading="lazy"
+                      width={800}
+                      height={1024}
+                    />
                   </div>
-                </div>
-              </Link>
-            ))}
+                  <div className="p-4">
+                    <h3 className="font-display text-lg font-semibold">{style.name}</h3>
+                    <div className="flex items-center justify-between mt-1">
+                      <span className="text-accent font-bold">${style.basePrice}+</span>
+                      <span className="text-xs text-muted-foreground">{formatStyleDuration(style)}</span>
+                    </div>
+                  </div>
+                </Link>
+              ))}
+            </div>
           </div>
-        </div>
-      </section>
+        </section>
+      ) : (
+        <section className="section-padding">
+          <div className="container mx-auto max-w-lg text-center">
+            <h2 className="heading-display text-2xl sm:text-3xl font-bold mb-3">Your storefront</h2>
+            <p className="text-muted-foreground text-sm mb-6">
+              Browse and booking for customers are on the public app. Use the dashboard to manage services, or open{" "}
+              <strong className="text-foreground">Customer view</strong> on the home screen to preview your catalog.
+            </p>
+            <Link to="/admin" className="btn-gold inline-flex items-center gap-2 text-sm">
+              Go to dashboard <ArrowRight className="w-4 h-4" />
+            </Link>
+          </div>
+        </section>
+      )}
 
       <section className="section-padding bg-primary text-primary-foreground">
         <div className="container mx-auto">

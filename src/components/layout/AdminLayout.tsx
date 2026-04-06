@@ -12,6 +12,10 @@ const mobileLinks = [
   { to: "/admin/settings", icon: Settings, label: "Settings" },
 ];
 
+function isAdminCustomerPreviewPath(pathname: string): boolean {
+  return pathname.includes("/admin/preview");
+}
+
 export default function AdminLayout() {
   const { user, loading, shop } = useAuth();
   const { pathname } = useLocation();
@@ -31,13 +35,17 @@ export default function AdminLayout() {
   }
   if (!isShopAdminInCurrentShop) return <Navigate to="/login" replace />;
 
+  // Customer preview uses nested routes under /admin/preview/* — no second Router.
+  if (isAdminCustomerPreviewPath(pathname)) {
+    return <Outlet />;
+  }
+
   return (
     <div className="flex min-h-[calc(100vh-4rem)]">
       <AdminSidebar />
       <main className="flex-1 p-4 lg:p-8 pb-24 lg:pb-8">
         <Outlet />
       </main>
-      {/* Mobile bottom nav */}
       <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-sidebar border-t border-sidebar-border flex justify-around py-2 z-50">
         {mobileLinks.map(({ to, icon: Icon, label }) => (
           <Link

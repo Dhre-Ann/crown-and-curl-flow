@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
+import { useCustomerPreviewReadOnly } from "@/context/ShopAdminPreviewContext";
+import { useCustomerFlowHrefFn } from "@/hooks/useCustomerFlowHref";
 import { appendActiveShopSlugToParams, fetchStyleById, withShopSearch } from "@/lib/api";
 import type { CatalogStyle } from "@/types/style";
 import { usePriceCalculator } from "@/hooks/usePriceCalculator";
@@ -7,6 +9,8 @@ import { formatStyleDuration, stylePrimaryImageUrl } from "@/lib/styleDisplay";
 import { Clock, Check } from "lucide-react";
 
 export default function ServiceDetail() {
+  const readOnlyPreview = useCustomerPreviewReadOnly();
+  const customerFlowTo = useCustomerFlowHrefFn();
   const { id } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
@@ -53,22 +57,33 @@ export default function ServiceDetail() {
     return (
       <div className="section-padding text-center">
         <h1 className="heading-display text-3xl font-bold mb-4">Style Not Found</h1>
-        <button type="button" onClick={() => navigate(withShopSearch("/services"))} className="btn-gold">
+        <button type="button" onClick={() => navigate(customerFlowTo(withShopSearch("/services")))} className="btn-gold">
           Browse Styles
         </button>
       </div>
     );
   }
 
-  return <ServiceDetailLoaded style={style} navigate={navigate} />;
+  return (
+    <ServiceDetailLoaded
+      style={style}
+      navigate={navigate}
+      readOnlyPreview={readOnlyPreview}
+      customerFlowTo={customerFlowTo}
+    />
+  );
 }
 
 function ServiceDetailLoaded({
   style,
   navigate,
+  readOnlyPreview,
+  customerFlowTo,
 }: {
   style: CatalogStyle;
   navigate: ReturnType<typeof useNavigate>;
+  readOnlyPreview: boolean;
+  customerFlowTo: (pathWithSearch: string) => string;
 }) {
   const {
     types,
@@ -83,6 +98,7 @@ function ServiceDetailLoaded({
   } = usePriceCalculator(style);
 
   const handleProceed = () => {
+    if (readOnlyPreview) return;
     const params = new URLSearchParams({
       style: style.id,
       partSize,
@@ -91,7 +107,7 @@ function ServiceDetailLoaded({
       total: String(Math.round(totalPrice * 100) / 100),
     });
     appendActiveShopSlugToParams(params);
-    navigate(`/book?${params.toString()}`);
+    navigate(customerFlowTo(`/book?${params.toString()}`));
   };
 
   return (
@@ -199,9 +215,15 @@ function ServiceDetailLoaded({
                   ${Number(totalPrice.toFixed(2))}
                 </span>
               </div>
-              <button type="button" onClick={handleProceed} className="btn-gold w-full mt-6 text-center">
-                Proceed to Book
-              </button>
+              {readOnlyPreview ? (
+                <p className="text-sm text-muted-foreground text-center mt-6">
+                  Preview mode — booking is disabled.
+                </p>
+              ) : (
+                <button type="button" onClick={handleProceed} className="btn-gold w-full mt-6 text-center">
+                  Proceed to Book
+                </button>
+              )}
             </div>
           </div>
         </div>

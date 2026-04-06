@@ -1,8 +1,12 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { mockAppointments, Appointment } from "@/data/mockAppointments";
-import { Calendar, DollarSign, Clock, Users, Check, X } from "lucide-react";
+import { useAuth } from "@/context/AuthContext";
+import { Calendar, DollarSign, Clock, Users, Check, X, Eye } from "lucide-react";
 
 export default function AdminDashboard() {
+  const { user } = useAuth();
+  const navigate = useNavigate();
   const [appointments, setAppointments] = useState<Appointment[]>(mockAppointments);
 
   const totalBookings = appointments.length;
@@ -22,7 +26,19 @@ export default function AdminDashboard() {
 
   return (
     <div>
-      <h1 className="heading-display text-3xl font-bold mb-6">Dashboard</h1>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+        <h1 className="heading-display text-3xl font-bold">Dashboard</h1>
+        {user?.role === "shop_admin" ? (
+          <button
+            type="button"
+            onClick={() => navigate("/admin/preview/services")}
+            className="inline-flex items-center justify-center gap-2 rounded-lg border border-border bg-card px-4 py-2.5 text-sm font-medium hover:bg-muted transition-colors"
+          >
+            <Eye className="w-4 h-4" />
+            Customer view
+          </button>
+        ) : null}
+      </div>
 
       {/* Summary cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">

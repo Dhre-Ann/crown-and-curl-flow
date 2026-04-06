@@ -1,5 +1,7 @@
 import { useState, useMemo, useEffect } from "react";
 import { Link, useSearchParams, useNavigate } from "react-router-dom";
+import { useCustomerPreviewReadOnly } from "@/context/ShopAdminPreviewContext";
+import { useCustomerFlowHrefFn } from "@/hooks/useCustomerFlowHref";
 import { appendActiveShopSlugToParams, fetchStyleById, withShopSearch } from "@/lib/api";
 import type { CatalogStyle } from "@/types/style";
 import { ChevronLeft, ChevronRight, Clock } from "lucide-react";
@@ -8,6 +10,8 @@ const AVAILABLE_DAYS = [2, 3, 4, 5, 6];
 const TIME_SLOTS = ["9:00 AM", "1:00 PM", "5:00 PM"];
 
 export default function Book() {
+  const readOnlyPreview = useCustomerPreviewReadOnly();
+  const customerFlowTo = useCustomerFlowHrefFn();
   const [params] = useSearchParams();
   const navigate = useNavigate();
   const styleId = params.get("style") || "";
@@ -62,6 +66,7 @@ export default function Book() {
   };
 
   const handleProceed = () => {
+    if (readOnlyPreview) return;
     if (!selectedDate || !selectedTime) return;
     const dateStr = selectedDate.toISOString().split("T")[0];
     const cp = new URLSearchParams({
@@ -74,7 +79,7 @@ export default function Book() {
       time: selectedTime,
     });
     appendActiveShopSlugToParams(cp);
-    navigate(`/checkout?${cp.toString()}`);
+    navigate(customerFlowTo(`/checkout?${cp.toString()}`));
   };
 
   const monthNames = [
@@ -236,26 +241,30 @@ export default function Book() {
                       ${Number(total.toFixed(2))}
                     </span>
                   </div>
-                  <button
-                    type="button"
-                    onClick={handleProceed}
-                    disabled={!selectedDate || !selectedTime}
-                    className="btn-gold w-full mt-6 text-center disabled:opacity-40 disabled:pointer-events-none"
-                  >
-                    Review & Pay
-                  </button>
+                  {readOnlyPreview ? (
+                    <p className="text-sm text-muted-foreground text-center mt-6">Preview mode — checkout is disabled.</p>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={handleProceed}
+                      disabled={!selectedDate || !selectedTime}
+                      className="btn-gold w-full mt-6 text-center disabled:opacity-40 disabled:pointer-events-none"
+                    >
+                      Review & Pay
+                    </button>
+                  )}
                 </>
               ) : styleId ? (
                 <p className="text-muted-foreground text-sm">
                   This style is unavailable or was removed.{" "}
-                  <Link to={withShopSearch("/services")} className="text-accent underline">
+                  <Link to={customerFlowTo(withShopSearch("/services"))} className="text-accent underline">
                     Browse styles
                   </Link>
                 </p>
               ) : (
                 <p className="text-muted-foreground text-sm">
                   No style selected.{" "}
-                  <Link to={withShopSearch("/services")} className="text-accent underline">
+                  <Link to={customerFlowTo(withShopSearch("/services"))} className="text-accent underline">
                     Browse styles
                   </Link>
                 </p>

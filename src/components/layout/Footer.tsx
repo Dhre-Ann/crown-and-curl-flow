@@ -1,7 +1,10 @@
 import { Link } from "react-router-dom";
+import { useAuth } from "@/context/AuthContext";
 import { getShopSlug, withShopSearch } from "@/lib/api";
 
 export default function Footer() {
+  const { user } = useAuth();
+  const hideMarketplaceLinks = user?.role === "shop_admin";
   const shopSlug = getShopSlug();
   const servicesHref = shopSlug ? withShopSearch("/services") : "/shops";
   const bookHref = shopSlug ? withShopSearch("/book") : "/shops";
@@ -19,15 +22,19 @@ export default function Footer() {
           <div>
             <h4 className="font-semibold mb-3 text-sm tracking-wide uppercase opacity-70">Quick Links</h4>
             <div className="space-y-2">
-              <Link to="/shops" className="block text-sm opacity-80 hover:opacity-100 transition-opacity">
-                Browse shops
-              </Link>
-              <Link to={servicesHref} className="block text-sm opacity-80 hover:opacity-100 transition-opacity">
-                Services
-              </Link>
-              <Link to={bookHref} className="block text-sm opacity-80 hover:opacity-100 transition-opacity">
-                Book now
-              </Link>
+              {!hideMarketplaceLinks ? (
+                <>
+                  <Link to="/shops" className="block text-sm opacity-80 hover:opacity-100 transition-opacity">
+                    Browse shops
+                  </Link>
+                  <Link to={servicesHref} className="block text-sm opacity-80 hover:opacity-100 transition-opacity">
+                    Services
+                  </Link>
+                  <Link to={bookHref} className="block text-sm opacity-80 hover:opacity-100 transition-opacity">
+                    Book now
+                  </Link>
+                </>
+              ) : null}
               <Link to="/login" className="block text-sm opacity-80 hover:opacity-100 transition-opacity">Sign In</Link>
             </div>
           </div>

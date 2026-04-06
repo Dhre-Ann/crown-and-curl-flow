@@ -1,10 +1,12 @@
 import { useState, useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
+import { useCustomerPreviewReadOnly } from "@/context/ShopAdminPreviewContext";
 import { fetchStyleById } from "@/lib/api";
 import type { CatalogStyle } from "@/types/style";
 import { Check, ShieldCheck, CalendarCheck } from "lucide-react";
 
 export default function Checkout() {
+  const readOnlyPreview = useCustomerPreviewReadOnly();
   const [params] = useSearchParams();
   const styleId = params.get("style") || "";
   const partSize = params.get("partSize") || "";
@@ -42,7 +44,7 @@ export default function Checkout() {
 
   const allChecked = policies.late && policies.cancel && policies.noshow;
 
-  if (paid) {
+  if (paid && !readOnlyPreview) {
     return (
       <div className="section-padding">
         <div className="container mx-auto max-w-lg text-center animate-fade-in">
@@ -94,6 +96,12 @@ export default function Checkout() {
         <h1 className="heading-display text-3xl sm:text-4xl font-bold mb-8">
           Review & <span className="text-gold-gradient">Pay</span>
         </h1>
+
+        {readOnlyPreview ? (
+          <p className="mb-6 rounded-lg border border-border bg-secondary/80 px-4 py-3 text-sm text-muted-foreground">
+            Preview mode — payments and booking confirmation are disabled.
+          </p>
+        ) : null}
 
         <div className="grid grid-cols-1 md:grid-cols-5 gap-8">
           <div className="md:col-span-3 space-y-6">
@@ -150,9 +158,14 @@ export default function Checkout() {
                     text: "I understand that a no-show means my deposit is forfeited.",
                   },
                 ].map(({ key, text }) => (
-                  <label key={key} className="flex items-start gap-3 cursor-pointer group">
+                  <label
+                    key={key}
+                    className={`flex items-start gap-3 group ${readOnlyPreview ? "cursor-not-allowed opacity-60" : "cursor-pointer"}`}
+                  >
                     <div
-                      onClick={() => setPolicies((p) => ({ ...p, [key]: !p[key] }))}
+                      onClick={() => {
+                        if (!readOnlyPreview) setPolicies((p) => ({ ...p, [key]: !p[key] }));
+                      }}
                       className={`mt-0.5 w-5 h-5 rounded border-2 flex items-center justify-center transition-all shrink-0 ${
                         policies[key] ? "bg-accent border-accent" : "border-input group-hover:border-muted-foreground"
                       }`}
@@ -188,6 +201,7 @@ export default function Checkout() {
                 <input
                   type="text"
                   placeholder="Card number"
+                  readOnly={readOnlyPreview}
                   className="w-full bg-background border border-input rounded-md px-3 py-2 text-sm"
                   defaultValue="4242 4242 4242 4242"
                 />
@@ -195,12 +209,14 @@ export default function Checkout() {
                   <input
                     type="text"
                     placeholder="MM/YY"
+                    readOnly={readOnlyPreview}
                     className="bg-background border border-input rounded-md px-3 py-2 text-sm"
                     defaultValue="12/28"
                   />
                   <input
                     type="text"
                     placeholder="CVC"
+                    readOnly={readOnlyPreview}
                     className="bg-background border border-input rounded-md px-3 py-2 text-sm"
                     defaultValue="123"
                   />
@@ -209,8 +225,10 @@ export default function Checkout() {
 
               <button
                 type="button"
-                onClick={() => setPaid(true)}
-                disabled={!allChecked}
+                onClick={() => {
+                  if (!readOnlyPreview) setPaid(true);
+                }}
+                disabled={readOnlyPreview || !allChecked}
                 className="btn-gold w-full text-center disabled:opacity-40 disabled:pointer-events-none"
               >
                 Pay ${deposit} Deposit

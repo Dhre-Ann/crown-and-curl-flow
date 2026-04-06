@@ -8,6 +8,7 @@ const {
   optionalAuthPayload,
   requireShopAdminMatchesShop,
 } = require("../middleware/auth");
+const { handleValidationErrors, validateService, validateCustomization } = require("../middleware/validate");
 
 const router = express.Router();
 
@@ -107,24 +108,11 @@ router.post(
   requireAuth,
   requireShopAdmin,
   requireShopAdminMatchesShop,
+  validateService,
+  handleValidationErrors,
   async (req, res) => {
     try {
       const { name, description, basePrice, durationMin, durationMax } = req.body;
-      if (!name || basePrice === undefined || durationMin === undefined || durationMax === undefined) {
-        return res.status(400).json({
-          success: false,
-          error: "name, basePrice, durationMin and durationMax are required",
-        });
-      }
-
-      const min = parseInt(String(durationMin), 10);
-      const max = parseInt(String(durationMax), 10);
-      if (Number.isNaN(min) || Number.isNaN(max) || min < 0 || max < min) {
-        return res.status(400).json({
-          success: false,
-          error: "durationMin and durationMax must be valid integers with durationMax >= durationMin",
-        });
-      }
 
       let priceDecimal;
       try {
@@ -136,17 +124,17 @@ router.post(
       const style = await prisma.style.create({
         data: {
           name: String(name).trim(),
-          description: description != null ? String(description) : null,
+          description: description != null && String(description) !== "" ? String(description) : null,
           basePrice: priceDecimal,
-          durationMin: min,
-          durationMax: max,
+          durationMin,
+          durationMax,
           shopId: req.shop.id,
         },
         include: styleInclude,
       });
 
       return res.status(201).json({ success: true, data: { style: serializeStyle(style) } });
-    } catch (error) {
+    } catch {
       return res.status(500).json({ success: false, error: "Failed to create style" });
     }
   }
@@ -158,6 +146,8 @@ router.put(
   requireAuth,
   requireShopAdmin,
   requireShopAdminMatchesShop,
+  validateService,
+  handleValidationErrors,
   async (req, res) => {
     try {
       const existing = await prisma.style.findFirst({
@@ -168,21 +158,6 @@ router.put(
       }
 
       const { name, description, basePrice, durationMin, durationMax } = req.body;
-      if (!name || basePrice === undefined || durationMin === undefined || durationMax === undefined) {
-        return res.status(400).json({
-          success: false,
-          error: "name, basePrice, durationMin and durationMax are required",
-        });
-      }
-
-      const min = parseInt(String(durationMin), 10);
-      const max = parseInt(String(durationMax), 10);
-      if (Number.isNaN(min) || Number.isNaN(max) || min < 0 || max < min) {
-        return res.status(400).json({
-          success: false,
-          error: "durationMin and durationMax must be valid integers with durationMax >= durationMin",
-        });
-      }
 
       let priceDecimal;
       try {
@@ -195,16 +170,16 @@ router.put(
         where: { id: existing.id },
         data: {
           name: String(name).trim(),
-          description: description != null ? String(description) : null,
+          description: description != null && String(description) !== "" ? String(description) : null,
           basePrice: priceDecimal,
-          durationMin: min,
-          durationMax: max,
+          durationMin,
+          durationMax,
         },
         include: styleInclude,
       });
 
       return res.status(200).json({ success: true, data: { style: serializeStyle(style) } });
-    } catch (error) {
+    } catch {
       return res.status(500).json({ success: false, error: "Failed to update style" });
     }
   }
@@ -229,7 +204,7 @@ router.delete(
       return res.status(200).json({ success: true, data: { deleted: true } });
     } catch (error) {
       // Referenced by appointments or other FKs — do not cascade-delete client bookings.
-      if (error && error.code === "P2003") {
+      if (error?.code === "P2003") {
         return res.status(409).json({
           success: false,
           error: "Cannot delete a style that is referenced by existing appointments",
@@ -274,6 +249,8 @@ router.post(
   requireAuth,
   requireShopAdmin,
   requireShopAdminMatchesShop,
+  validateCustomization,
+  handleValidationErrors,
   async (req, res) => {
     try {
       const existing = await prisma.style.findFirst({
@@ -284,12 +261,6 @@ router.post(
       }
 
       const { optionType, name, priceModifier } = req.body;
-      if (!optionType || !name || priceModifier === undefined) {
-        return res.status(400).json({
-          success: false,
-          error: "optionType, name and priceModifier are required",
-        });
-      }
 
       let modDecimal;
       try {
@@ -320,7 +291,7 @@ router.post(
           style: serializeStyle(style),
         },
       });
-    } catch (error) {
+    } catch {
       return res.status(500).json({ success: false, error: "Failed to add option" });
     }
   }

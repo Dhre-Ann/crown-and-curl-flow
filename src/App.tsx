@@ -8,6 +8,8 @@ import { AuthProvider, useAuth } from "@/context/AuthContext";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
 import AdminLayout from "@/components/layout/AdminLayout";
+import AdminCustomerPreviewLayout from "@/components/layout/AdminCustomerPreviewLayout";
+import ShopAdminMarketplaceGuard from "@/components/routing/ShopAdminMarketplaceGuard";
 
 import Landing from "@/pages/public/Landing";
 import BrowseShops from "@/pages/public/BrowseShops";
@@ -51,11 +53,46 @@ const App = () => (
             <main className="flex-1">
               <Routes>
                 <Route path="/" element={<Landing />} />
-                <Route path="/shops" element={<BrowseShops />} />
-                <Route path="/services" element={<Services />} />
-                <Route path="/services/:id" element={<ServiceDetail />} />
-                <Route path="/book" element={<Book />} />
-                <Route path="/checkout" element={<Checkout />} />
+                <Route
+                  path="/shops"
+                  element={
+                    <ShopAdminMarketplaceGuard>
+                      <BrowseShops />
+                    </ShopAdminMarketplaceGuard>
+                  }
+                />
+                <Route
+                  path="/services"
+                  element={
+                    <ShopAdminMarketplaceGuard>
+                      <Services />
+                    </ShopAdminMarketplaceGuard>
+                  }
+                />
+                <Route
+                  path="/services/:id"
+                  element={
+                    <ShopAdminMarketplaceGuard>
+                      <ServiceDetail />
+                    </ShopAdminMarketplaceGuard>
+                  }
+                />
+                <Route
+                  path="/book"
+                  element={
+                    <ShopAdminMarketplaceGuard>
+                      <Book />
+                    </ShopAdminMarketplaceGuard>
+                  }
+                />
+                <Route
+                  path="/checkout"
+                  element={
+                    <ShopAdminMarketplaceGuard>
+                      <Checkout />
+                    </ShopAdminMarketplaceGuard>
+                  }
+                />
                 <Route path="/login" element={<Login />} />
                 <Route path="/register" element={<Register />} />
                 <Route
@@ -80,6 +117,13 @@ const App = () => (
                   <Route path="calendar" element={<AdminCalendar />} />
                   <Route path="reviews" element={<AdminReviews />} />
                   <Route path="settings" element={<AdminSettings />} />
+                  <Route path="preview" element={<AdminCustomerPreviewLayout />}>
+                    <Route index element={<Navigate to="services" replace />} />
+                    <Route path="services/:id" element={<ServiceDetail />} />
+                    <Route path="services" element={<Services />} />
+                    <Route path="book" element={<Book />} />
+                    <Route path="checkout" element={<Checkout />} />
+                  </Route>
                 </Route>
                 <Route path="*" element={<NotFound />} />
               </Routes>

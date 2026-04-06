@@ -1,11 +1,15 @@
 import { useEffect, useState } from "react";
 import { Link, Navigate, useLocation } from "react-router-dom";
+import { useCustomerPreviewReadOnly } from "@/context/ShopAdminPreviewContext";
+import { useCustomerFlowHrefFn } from "@/hooks/useCustomerFlowHref";
 import { fetchStylesCatalog, getShopSlug, withShopSearch } from "@/lib/api";
 import type { CatalogStyle } from "@/types/style";
 import { formatStyleDuration, stylePrimaryImageUrl } from "@/lib/styleDisplay";
 import { Clock, DollarSign } from "lucide-react";
 
 export default function Services() {
+  const readOnlyPreview = useCustomerPreviewReadOnly();
+  const customerFlowTo = useCustomerFlowHrefFn();
   const location = useLocation();
   const shopSlug = getShopSlug();
   const [styles, setStyles] = useState<CatalogStyle[]>([]);
@@ -74,11 +78,13 @@ export default function Services() {
           <p className="text-muted-foreground max-w-md mx-auto">
             Browse our curated collection and find your next look.
           </p>
-          <p className="text-sm text-muted-foreground mt-3">
-            <Link to="/shops" className="text-accent underline">
-              Switch shop
-            </Link>
-          </p>
+          {!readOnlyPreview ? (
+            <p className="text-sm text-muted-foreground mt-3">
+              <Link to="/shops" className="text-accent underline">
+                Switch shop
+              </Link>
+            </p>
+          ) : null}
         </div>
 
         {styles.length === 0 ? (
@@ -113,7 +119,7 @@ export default function Services() {
                     </span>
                   </div>
                   <Link
-                    to={withShopSearch(`/services/${style.id}`)}
+                    to={customerFlowTo(withShopSearch(`/services/${style.id}`))}
                     className="btn-gold w-full text-center block text-sm !py-2.5"
                   >
                     Customize & Book

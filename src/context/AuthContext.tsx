@@ -3,6 +3,7 @@ import {
   clearToken,
   getToken,
   loginRequest,
+  logoutRequest,
   meRequest,
   registerCustomerRequest,
   registerShopRequest,
@@ -45,7 +46,7 @@ interface AuthContextType {
   login: (payload: LoginPayload) => Promise<{ user: ApiUser; shop: ApiShop | null }>;
   registerCustomer: (payload: RegisterCustomerPayload) => Promise<{ user: ApiUser }>;
   registerShop: (payload: RegisterShopPayload) => Promise<{ user: ApiUser; shop: ApiShop }>;
-  logout: () => void;
+  logout: () => Promise<void>;
   loading: boolean;
 }
 
@@ -108,7 +109,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { user: response.user, shop: response.shop };
   };
 
-  const logout = () => {
+  const logout = async () => {
+    try {
+      await logoutRequest();
+    } catch {
+      // Clear local session even if the server cookie clear fails (offline, etc.).
+    }
     clearToken();
     setUser(null);
     setShop(null);

@@ -9,6 +9,14 @@ const TOKEN_KEY = "crownStudioToken";
 /** When a shop_admin has no subdomain/query/env tenant, API calls still need x-shop-slug — set from login/me. */
 const SESSION_SHOP_SLUG_KEY = "crownStudioSessionShopSlug";
 
+/** While shop_admin previews the storefront inside /admin, force tenant resolution to their shop slug. */
+let customerPreviewShopSlugOverride: string | null = null;
+
+export function setCustomerPreviewShopSlug(slug: string | null): void {
+  customerPreviewShopSlugOverride =
+    slug != null && String(slug).trim() !== "" ? String(slug).trim() : null;
+}
+
 /**
  * Production: set VITE_SHOP_ROOT_DOMAIN=crownstudio.com so only {slug}.crownstudio.com yields a slug
  * (apex crownstudio.com stays customer / marketing context).
@@ -124,6 +132,10 @@ export function hostnameProvidesShopSlug(): boolean {
 export function getShopSlug(): string | null {
   if (typeof window === "undefined") {
     return null;
+  }
+
+  if (customerPreviewShopSlugOverride) {
+    return customerPreviewShopSlugOverride;
   }
 
   const hostname = window.location.hostname;
@@ -311,6 +323,7 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
     method: options.method ?? "GET",
     headers: buildHeaders(options.auth ?? false),
     body: options.body ? JSON.stringify(options.body) : undefined,
+    credentials: "include",
   });
 
   const payload = (await response.json()) as ApiResponse<T>;
@@ -354,6 +367,12 @@ export async function registerShopRequest(payload: {
 export async function meRequest() {
   return request<{ user: ApiUser; shop: ApiShop | null }>("/api/auth/me", {
     auth: true,
+  });
+}
+
+export async function logoutRequest(): Promise<void> {
+  await request<{ loggedOut: boolean }>("/api/auth/logout", {
+    method: "POST",
   });
 }
 

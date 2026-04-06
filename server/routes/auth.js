@@ -4,12 +4,42 @@ const jwt = require("jsonwebtoken");
 const prisma = require("../lib/prisma");
 const { allocateUniqueShopSlug } = require("../lib/shopSlugFromName");
 const { requireAuth, loadCurrentUser } = require("../middleware/auth");
+const { strictLimiter } = require("../middleware/rateLimiter");
+const {
+  handleValidationErrors,
+  validateLogin,
+  validateRegister,
+  validateShopRegister,
+} = require("../middleware/validate");
 
 const router = express.Router();
 const SALT_ROUNDS = 12;
 
 function getJwtSecret() {
   return process.env.JWT_SECRET;
+}
+
+function tokenCookieOptions() {
+  return {
+    httpOnly: true,
+    sameSite: "strict",
+    secure: process.env.NODE_ENV === "production",
+    maxAge: 7 * 24 * 60 * 60 * 1000,
+    path: "/",
+  };
+}
+
+function setTokenCookie(res, token) {
+  res.cookie("crownStudioToken", token, tokenCookieOptions());
+}
+
+function clearTokenCookie(res) {
+  res.clearCookie("crownStudioToken", {
+    httpOnly: true,
+    sameSite: "strict",
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+  });
 }
 
 function sanitizeUser(user) {
@@ -34,12 +64,9 @@ function signToken(user) {
   });
 }
 
-router.post("/register", async (req, res) => {
+router.post("/register", validateRegister, handleValidationErrors, async (req, res) => {
   try {
     const { name, email, password } = req.body;
-    if (!name || !email || !password) {
-      return res.status(400).json({ success: false, error: "name, email and password are required" });
-    }
 
     const existingUser = await prisma.user.findUnique({ where: { email } });
     if (existingUser) {
@@ -59,6 +86,7 @@ router.post("/register", async (req, res) => {
     });
 
     const token = signToken(user);
+    setTokenCookie(res, token);
     return res.status(201).json({
       success: true,
       data: {
@@ -66,20 +94,14 @@ router.post("/register", async (req, res) => {
         user: sanitizeUser(user),
       },
     });
-  } catch (error) {
+  } catch {
     return res.status(500).json({ success: false, error: "Failed to register user" });
   }
 });
 
-router.post("/shop-register", async (req, res) => {
+router.post("/shop-register", validateShopRegister, handleValidationErrors, async (req, res) => {
   try {
     const { name, email, password, shopName, serviceCategory } = req.body;
-    if (!name || !email || !password || !shopName) {
-      return res.status(400).json({
-        success: false,
-        error: "name, email, password and shopName are required",
-      });
-    }
 
     const trimmedShopName = String(shopName).trim();
     if (!trimmedShopName) {
@@ -129,6 +151,7 @@ router.post("/shop-register", async (req, res) => {
     });
 
     const token = signToken(result.user);
+    setTokenCookie(res, token);
     return res.status(201).json({
       success: true,
       data: {
@@ -137,17 +160,14 @@ router.post("/shop-register", async (req, res) => {
         shop: result.shop,
       },
     });
-  } catch (error) {
+  } catch {
     return res.status(500).json({ success: false, error: "Failed to register shop" });
   }
 });
 
-router.post("/login", async (req, res) => {
+router.post("/login", strictLimiter, validateLogin, handleValidationErrors, async (req, res) => {
   try {
     const { email, password } = req.body;
-    if (!email || !password) {
-      return res.status(400).json({ success: false, error: "email and password are required" });
-    }
 
     const user = await prisma.user.findUnique({
       where: { email },
@@ -171,6 +191,7 @@ router.post("/login", async (req, res) => {
     // Customers use one account across all shops; never tie login to a single shopId.
 
     const token = signToken(user);
+    setTokenCookie(res, token);
 
     let shop = null;
     if (user.role === "super_admin") {
@@ -189,9 +210,14 @@ router.post("/login", async (req, res) => {
         shop,
       },
     });
-  } catch (error) {
+  } catch {
     return res.status(500).json({ success: false, error: "Failed to login" });
   }
+});
+
+router.post("/logout", (req, res) => {
+  clearTokenCookie(res);
+  return res.status(200).json({ success: true, data: { loggedOut: true } });
 });
 
 router.get("/me", requireAuth, loadCurrentUser, async (req, res) => {

@@ -1,8 +1,10 @@
 require("dotenv").config();
 
 const express = require("express");
+const helmet = require("helmet");
 const cors = require("cors");
 const { shopResolver } = require("./middleware/shopResolver");
+const { authLimiter, apiLimiter } = require("./middleware/rateLimiter");
 const authRoutes = require("./routes/auth");
 const stylesRoutes = require("./routes/styles");
 const appointmentsRoutes = require("./routes/appointments");
@@ -11,22 +13,42 @@ const shopsRoutes = require("./routes/shops");
 
 const app = express();
 
+// Security headers on every response — must run before routes and body parsers.
+app.use(helmet());
+
 const defaultOrigins = ["http://localhost:3000", "http://localhost:8080"];
 const extraOrigins = process.env.CORS_ORIGINS
   ? process.env.CORS_ORIGINS.split(",").map((o) => o.trim()).filter(Boolean)
   : [];
 const allowedOrigins = [...defaultOrigins, ...extraOrigins];
-app.use(cors({ origin: allowedOrigins }));
+
+app.use(
+  cors({
+    origin: allowedOrigins,
+    credentials: true,
+  })
+);
 app.use(express.json());
 
 // Resolve optional shop tenant from header/query before route handlers (req.shop or null).
 app.use(shopResolver);
 
+function shouldSkipApiLimiter(req) {
+  return !req.path.startsWith("/api") || req.path.startsWith("/api/auth");
+}
+
+app.use((req, res, next) => {
+  if (shouldSkipApiLimiter(req)) {
+    return next();
+  }
+  return apiLimiter(req, res, next);
+});
+
 app.get("/api/health", (req, res) => {
   res.status(200).json({ success: true, message: "Crown Studio API is running" });
 });
 
-app.use("/api/auth", authRoutes);
+app.use("/api/auth", authLimiter, authRoutes);
 app.use("/api/shops", shopsRoutes);
 app.use("/api/styles", stylesRoutes);
 app.use("/api/appointments", appointmentsRoutes);
@@ -48,4 +70,3 @@ if (require.main === module) {
     console.log(`API listening on port ${port}`);
   });
 }
-
