@@ -8,6 +8,8 @@ const authLimiter = rateLimit({
   max: 10,
   standardHeaders: true,
   legacyHeaders: false,
+  // Do not count 2xx/3xx so repeated successful logins (e.g. account switching) are not capped here.
+  skipSuccessfulRequests: true,
   message: { success: false, error: "Too many auth attempts, please try again later" },
 });
 
@@ -20,12 +22,14 @@ const apiLimiter = rateLimit({
   message: { success: false, error: "Too many requests, please try again later" },
 });
 
-/** Login only — stricter cap to slow credential stuffing. */
+/** Login only — stricter cap to slow credential stuffing (failed attempts only). */
 const strictLimiter = rateLimit({
   windowMs,
   max: 5,
   standardHeaders: true,
   legacyHeaders: false,
+  // Successful 2xx/3xx logins do not count, so dev and account-switching are not penalized.
+  skipSuccessfulRequests: true,
   message: { success: false, error: "Too many login attempts, please try again later" },
 });
 
