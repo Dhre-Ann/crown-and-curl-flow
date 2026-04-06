@@ -99,12 +99,14 @@ function ServiceDetailLoaded({
 
   const handleProceed = () => {
     if (readOnlyPreview) return;
+    const optionIds = types.map((t) => selectedIdByType[t]).filter(Boolean);
     const params = new URLSearchParams({
       style: style.id,
       partSize,
       length,
       color,
       total: String(Math.round(totalPrice * 100) / 100),
+      optionIds: optionIds.join(","),
     });
     appendActiveShopSlugToParams(params);
     navigate(customerFlowTo(`/book?${params.toString()}`));

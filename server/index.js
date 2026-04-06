@@ -8,6 +8,7 @@ const { authLimiter, apiLimiter } = require("./middleware/rateLimiter");
 const authRoutes = require("./routes/auth");
 const stylesRoutes = require("./routes/styles");
 const appointmentsRoutes = require("./routes/appointments");
+const availabilityRoutes = require("./routes/availability");
 const customerRoutes = require("./routes/customer");
 const shopsRoutes = require("./routes/shops");
 
@@ -52,6 +53,7 @@ app.use("/api/auth", authLimiter, authRoutes);
 app.use("/api/shops", shopsRoutes);
 app.use("/api/styles", stylesRoutes);
 app.use("/api/appointments", appointmentsRoutes);
+app.use("/api/availability", availabilityRoutes);
 app.use("/api/customer", customerRoutes);
 
 // Placeholder route groups (future phases).

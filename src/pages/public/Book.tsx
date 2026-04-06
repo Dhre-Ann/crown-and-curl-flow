@@ -1,13 +1,35 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import { Link, useSearchParams, useNavigate } from "react-router-dom";
 import { useCustomerPreviewReadOnly } from "@/context/ShopAdminPreviewContext";
 import { useCustomerFlowHrefFn } from "@/hooks/useCustomerFlowHref";
-import { appendActiveShopSlugToParams, fetchStyleById, withShopSearch } from "@/lib/api";
+import {
+  appendActiveShopSlugToParams,
+  fetchAvailabilityMonthRequest,
+  fetchAvailabilitySlotsRequest,
+  fetchStyleById,
+  withShopSearch,
+} from "@/lib/api";
 import type { CatalogStyle } from "@/types/style";
 import { ChevronLeft, ChevronRight, Clock } from "lucide-react";
 
-const AVAILABLE_DAYS = [2, 3, 4, 5, 6];
-const TIME_SLOTS = ["9:00 AM", "1:00 PM", "5:00 PM"];
+function monthKey(d: Date) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function padYmd(year: number, month0: number, day: number) {
+  return `${year}-${String(month0 + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}
+
+export interface BookCheckoutState {
+  styleId: string;
+  optionIds: string[];
+  partSize: string;
+  length: string;
+  color: string;
+  estimateTotal: number;
+  date: string;
+  time: string;
+}
 
 export default function Book() {
   const readOnlyPreview = useCustomerPreviewReadOnly();
@@ -19,6 +41,11 @@ export default function Book() {
   const length = params.get("length") || "";
   const color = params.get("color") || "";
   const total = Number(params.get("total") || "0") || 0;
+  const optionIdsParam = params.get("optionIds") || "";
+  const optionIds = useMemo(
+    () => optionIdsParam.split(",").map((s) => s.trim()).filter(Boolean),
+    [optionIdsParam]
+  );
 
   const [style, setStyle] = useState<CatalogStyle | null>(null);
   const [styleLoading, setStyleLoading] = useState(Boolean(styleId));
@@ -46,9 +73,76 @@ export default function Book() {
     };
   }, [styleId]);
 
-  const [currentMonth, setCurrentMonth] = useState(new Date(2026, 3, 1));
+  const [currentMonth, setCurrentMonth] = useState(() => new Date());
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [selectedTime, setSelectedTime] = useState<string | null>(null);
+  const [monthMeta, setMonthMeta] = useState<Awaited<ReturnType<typeof fetchAvailabilityMonthRequest>> | null>(
+    null
+  );
+  const [monthLoading, setMonthLoading] = useState(false);
+  const [monthError, setMonthError] = useState<string | null>(null);
+  const [slots, setSlots] = useState<string[]>([]);
+  const [slotsLoading, setSlotsLoading] = useState(false);
+  const [slotsError, setSlotsError] = useState<string | null>(null);
+
+  const mk = monthKey(currentMonth);
+
+  useEffect(() => {
+    let cancelled = false;
+    setMonthLoading(true);
+    setMonthError(null);
+    (async () => {
+      try {
+        const data = await fetchAvailabilityMonthRequest(mk);
+        if (!cancelled) setMonthMeta(data);
+      } catch (e) {
+        if (!cancelled) {
+          setMonthMeta(null);
+          setMonthError(e instanceof Error ? e.message : "Failed to load calendar");
+        }
+      } finally {
+        if (!cancelled) setMonthLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [mk]);
+
+  const dayMetaByDate = useMemo(() => {
+    const m = new Map<string, { blocked: boolean; hasWorkHours: boolean }>();
+    if (!monthMeta?.days) return m;
+    for (const d of monthMeta.days) {
+      m.set(d.date, { blocked: d.blocked, hasWorkHours: d.hasWorkHours });
+    }
+    return m;
+  }, [monthMeta]);
+
+  const loadSlots = useCallback(
+    async (ymd: string) => {
+      setSlotsLoading(true);
+      setSlotsError(null);
+      try {
+        const list = await fetchAvailabilitySlotsRequest(ymd, styleId || undefined);
+        setSlots(list);
+      } catch (e) {
+        setSlots([]);
+        setSlotsError(e instanceof Error ? e.message : "Failed to load times");
+      } finally {
+        setSlotsLoading(false);
+      }
+    },
+    [styleId]
+  );
+
+  useEffect(() => {
+    if (!selectedDate) {
+      setSlots([]);
+      return;
+    }
+    const ymd = padYmd(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate());
+    void loadSlots(ymd);
+  }, [selectedDate, loadSlots]);
 
   const calendarDays = useMemo(() => {
     const year = currentMonth.getFullYear();
@@ -60,15 +154,35 @@ export default function Book() {
     return days;
   }, [currentMonth]);
 
-  const isAvailable = (day: number) => {
-    const d = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), day);
-    return AVAILABLE_DAYS.includes(d.getDay());
+  const todayStart = useMemo(() => {
+    const t = new Date();
+    t.setHours(0, 0, 0, 0);
+    return t.getTime();
+  }, []);
+
+  const isDaySelectable = (day: number) => {
+    const dateObj = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), day);
+    if (dateObj.getTime() < todayStart) return false;
+    const ymd = padYmd(currentMonth.getFullYear(), currentMonth.getMonth(), day);
+    const meta = dayMetaByDate.get(ymd);
+    if (!meta) return false;
+    return meta.hasWorkHours && !meta.blocked;
   };
 
   const handleProceed = () => {
     if (readOnlyPreview) return;
-    if (!selectedDate || !selectedTime) return;
-    const dateStr = selectedDate.toISOString().split("T")[0];
+    if (!selectedDate || !selectedTime || !styleId) return;
+    const dateStr = padYmd(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate());
+    const state: BookCheckoutState = {
+      styleId,
+      optionIds,
+      partSize,
+      length,
+      color,
+      estimateTotal: total,
+      date: dateStr,
+      time: selectedTime,
+    };
     const cp = new URLSearchParams({
       style: styleId,
       partSize,
@@ -77,9 +191,10 @@ export default function Book() {
       total: String(total),
       date: dateStr,
       time: selectedTime,
+      optionIds: optionIds.join(","),
     });
     appendActiveShopSlugToParams(cp);
-    navigate(customerFlowTo(`/checkout?${cp.toString()}`));
+    navigate(`${customerFlowTo(`/checkout?${cp.toString()}`)}`, { state });
   };
 
   const monthNames = [
@@ -103,6 +218,10 @@ export default function Book() {
         <h1 className="heading-display text-3xl sm:text-4xl font-bold mb-8">
           Pick Your <span className="text-gold-gradient">Date & Time</span>
         </h1>
+
+        {monthError && (
+          <p className="text-destructive text-sm bg-destructive/10 p-3 rounded-lg mb-6">{monthError}</p>
+        )}
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           <div className="lg:col-span-2">
@@ -135,6 +254,10 @@ export default function Book() {
                 </button>
               </div>
 
+              {monthLoading && (
+                <p className="text-sm text-muted-foreground mb-4">Loading availability…</p>
+              )}
+
               <div className="grid grid-cols-7 gap-1 mb-2">
                 {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d) => (
                   <div key={d} className="text-center text-xs font-medium text-muted-foreground py-2">
@@ -146,14 +269,30 @@ export default function Book() {
               <div className="grid grid-cols-7 gap-1">
                 {calendarDays.map((day, i) => {
                   if (!day) return <div key={i} />;
-                  const avail = isAvailable(day);
                   const dateObj = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), day);
+                  const ymd = padYmd(currentMonth.getFullYear(), currentMonth.getMonth(), day);
+                  const meta = dayMetaByDate.get(ymd);
+                  const blocked = meta?.blocked ?? false;
+                  const noHours = meta && !meta.hasWorkHours;
+                  const past = dateObj.getTime() < todayStart;
+                  const selectable = isDaySelectable(day);
                   const isSelected = selectedDate?.toDateString() === dateObj.toDateString();
                   return (
                     <button
                       key={i}
                       type="button"
-                      disabled={!avail}
+                      disabled={!selectable}
+                      title={
+                        blocked
+                          ? "Blocked"
+                          : noHours
+                            ? "Closed"
+                            : past
+                              ? "Past"
+                              : selectable
+                                ? "Available"
+                                : ""
+                      }
                       onClick={() => {
                         setSelectedDate(dateObj);
                         setSelectedTime(null);
@@ -161,9 +300,11 @@ export default function Book() {
                       className={`aspect-square flex items-center justify-center rounded-lg text-sm font-medium transition-all ${
                         isSelected
                           ? "bg-accent text-accent-foreground shadow-md"
-                          : avail
+                          : selectable
                             ? "hover:bg-muted text-foreground"
-                            : "text-muted-foreground/30 cursor-not-allowed"
+                            : blocked
+                              ? "bg-destructive/10 text-destructive/80 line-through"
+                              : "text-muted-foreground/30 cursor-not-allowed"
                       }`}
                     >
                       {day}
@@ -177,8 +318,17 @@ export default function Book() {
                   <h4 className="font-semibold text-sm uppercase tracking-wider text-muted-foreground mb-3 flex items-center gap-2">
                     <Clock className="w-4 h-4" /> Available Times
                   </h4>
-                  <div className="flex gap-3">
-                    {TIME_SLOTS.map((time) => (
+                  {slotsLoading && (
+                    <p className="text-sm text-muted-foreground">Loading times…</p>
+                  )}
+                  {slotsError && (
+                    <p className="text-destructive text-sm">{slotsError}</p>
+                  )}
+                  {!slotsLoading && !slotsError && slots.length === 0 && (
+                    <p className="text-sm text-muted-foreground">No open slots this day.</p>
+                  )}
+                  <div className="flex flex-wrap gap-3">
+                    {slots.map((time) => (
                       <button
                         key={time}
                         type="button"
@@ -241,6 +391,9 @@ export default function Book() {
                       ${Number(total.toFixed(2))}
                     </span>
                   </div>
+                  <p className="text-xs text-muted-foreground mt-2">
+                    Price shown is an estimate — the server confirms the final total at checkout.
+                  </p>
                   {readOnlyPreview ? (
                     <p className="text-sm text-muted-foreground text-center mt-6">Preview mode — checkout is disabled.</p>
                   ) : (

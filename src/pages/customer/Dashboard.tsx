@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import {
   fetchCustomerTechsRequest,
@@ -17,12 +17,28 @@ const statusColors: Record<string, string> = {
   cancelled: "bg-destructive/10 text-destructive",
 };
 
+const RETURN_KEY = "crownReturnAfterLogin";
+
 export default function CustomerDashboard() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [appointments, setAppointments] = useState<MyAppointment[]>([]);
   const [techs, setTechs] = useState<CustomerTech[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem(RETURN_KEY);
+      if (raw && raw.startsWith("/checkout")) {
+        sessionStorage.removeItem(RETURN_KEY);
+        navigate(raw);
+        return;
+      }
+    } catch {
+      /* ignore */
+    }
+  }, [navigate]);
 
   useEffect(() => {
     let cancelled = false;
@@ -48,8 +64,21 @@ export default function CustomerDashboard() {
     };
   }, []);
 
-  const upcoming = appointments.filter((a) => a.status === "pending" || a.status === "approved");
-  const past = appointments.filter((a) => a.status === "completed" || a.status === "cancelled");
+  const startOfToday = () => {
+    const t = new Date();
+    t.setHours(0, 0, 0, 0);
+    return t.getTime();
+  };
+  const todayTs = startOfToday();
+  const aptDayTs = (a: MyAppointment) => new Date(`${a.date}T12:00:00`).setHours(0, 0, 0, 0);
+
+  const upcoming = appointments
+    .filter(
+      (a) =>
+        (a.status === "pending" || a.status === "approved") && aptDayTs(a) >= todayTs
+    )
+    .sort((a, b) => aptDayTs(a) - aptDayTs(b) || a.time.localeCompare(b.time));
+  const past = appointments.filter((a) => !upcoming.some((u) => u.id === a.id));
 
   return (
     <div className="section-padding">
@@ -82,7 +111,10 @@ export default function CustomerDashboard() {
               >
                 <h3 className="font-semibold">{t.shopName}</h3>
                 <p className="text-xs text-muted-foreground mt-0.5">{t.slug}</p>
-                <p className="text-xs text-muted-foreground mt-2">Last visit: {t.lastAppointmentDate}</p>
+                <p className="text-xs text-muted-foreground mt-2">
+                  {t.totalAppointments} appointment{t.totalAppointments === 1 ? "" : "s"} · Last visit:{" "}
+                  {t.lastAppointmentDate}
+                </p>
               </a>
             ))}
           </div>

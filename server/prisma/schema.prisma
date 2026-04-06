@@ -116,11 +116,13 @@ model Appointment {
 // --- AVAILABILITY ---
 model BlockedDate {
   id      String   @id @default(uuid())
-  date    DateTime @db.Date @unique
+  date    DateTime @db.Date
   reason  String?
 
   shop   Shop   @relation(fields: [shopId], references: [id])
   shopId String
+
+  @@unique([shopId, date])
 }
 
 model WorkHour {
@@ -132,6 +134,8 @@ model WorkHour {
 
   shop   Shop   @relation(fields: [shopId], references: [id])
   shopId String
+
+  @@unique([shopId, dayOfWeek])
 }
 
 // --- REVIEWS ---

@@ -23,13 +23,17 @@ router.get("/techs", requireAuth, loadCurrentUser, async (req, res) => {
     for (const apt of appointments) {
       const prev = byShop.get(apt.shopId);
       const t = apt.date instanceof Date ? apt.date.getTime() : new Date(apt.date).getTime();
+      const nextCount = (prev?.count ?? 0) + 1;
       if (!prev || t > prev.lastTime) {
         byShop.set(apt.shopId, {
           shopName: apt.shop.name,
           slug: apt.shop.slug,
           lastTime: t,
           lastDate: apt.date,
+          count: nextCount,
         });
+      } else {
+        byShop.set(apt.shopId, { ...prev, count: nextCount });
       }
     }
 
@@ -37,6 +41,7 @@ router.get("/techs", requireAuth, loadCurrentUser, async (req, res) => {
       .map((v) => ({
         shopName: v.shopName,
         slug: v.slug,
+        totalAppointments: v.count,
         lastAppointmentDate:
           v.lastDate instanceof Date ? v.lastDate.toISOString().slice(0, 10) : String(v.lastDate),
       }))

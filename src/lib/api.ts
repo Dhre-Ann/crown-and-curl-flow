@@ -247,7 +247,58 @@ export interface MyAppointment {
 export interface CustomerTech {
   shopName: string;
   slug: string;
+  totalAppointments: number;
   lastAppointmentDate: string;
+}
+
+export interface AvailabilityDayMeta {
+  date: string;
+  blocked: boolean;
+  hasWorkHours: boolean;
+}
+
+export interface AvailabilityMonthData {
+  blockedDates: string[];
+  days: AvailabilityDayMeta[];
+}
+
+export interface ShopAppointmentRow {
+  id: string;
+  date: string;
+  time: string;
+  status: string;
+  customerName: string;
+  styleName: string;
+  totalPrice: number;
+  depositAmount: number;
+}
+
+export interface WorkHourRow {
+  dayOfWeek: number;
+  startTime: string;
+  endTime: string;
+  isActive: boolean;
+}
+
+export interface BlockedDateRow {
+  date: string;
+  reason: string | null;
+}
+
+export interface CreatedAppointment {
+  id: string;
+  date: string;
+  time: string;
+  selectedOptions: unknown;
+  totalPrice: number;
+  depositAmount: number;
+  status: string;
+  createdAt: string;
+  userId: string;
+  styleId: string;
+  shopId: string;
+  style?: { id: string; name: string };
+  shop?: { id: string; name: string; slug: string };
 }
 
 interface ApiSuccess<T> {
@@ -388,6 +439,87 @@ export async function fetchCustomerTechsRequest(): Promise<CustomerTech[]> {
     auth: true,
   });
   return data.techs;
+}
+
+export async function fetchAvailabilityMonthRequest(month: string): Promise<AvailabilityMonthData> {
+  const q = new URLSearchParams({ month });
+  const data = await request<AvailabilityMonthData>(`/api/availability?${q.toString()}`);
+  return data;
+}
+
+export async function fetchAvailabilitySlotsRequest(date: string, styleId?: string): Promise<string[]> {
+  const q = new URLSearchParams({ date });
+  if (styleId) q.set("styleId", styleId);
+  const data = await request<{ slots: string[] }>(`/api/availability?${q.toString()}`);
+  return data.slots;
+}
+
+export async function createAppointmentRequest(payload: {
+  styleId: string;
+  date: string;
+  time: string;
+  selectedOptions: string[];
+  totalPrice?: number;
+}): Promise<CreatedAppointment> {
+  const data = await request<{ appointment: CreatedAppointment }>("/api/appointments", {
+    method: "POST",
+    body: payload,
+    auth: true,
+  });
+  return data.appointment;
+}
+
+export async function fetchShopAppointmentsAdminRequest(): Promise<ShopAppointmentRow[]> {
+  const data = await request<{ appointments: ShopAppointmentRow[] }>("/api/appointments", {
+    auth: true,
+  });
+  return data.appointments;
+}
+
+export async function patchAppointmentStatusRequest(
+  id: string,
+  status: "approved" | "cancelled" | "completed"
+): Promise<void> {
+  await request<{ appointment: unknown }>(`/api/appointments/${encodeURIComponent(id)}/status`, {
+    method: "PATCH",
+    body: { status },
+    auth: true,
+  });
+}
+
+export async function fetchBlockedAndWorkHoursRequest(): Promise<{
+  blocked: BlockedDateRow[];
+  workHours: WorkHourRow[];
+}> {
+  return request("/api/availability/blocked", { auth: true });
+}
+
+export async function blockDateRequest(date: string, reason?: string | null): Promise<BlockedDateRow> {
+  const data = await request<{ blocked: BlockedDateRow }>("/api/availability/block", {
+    method: "POST",
+    body: { date, reason: reason ?? null },
+    auth: true,
+  });
+  return data.blocked;
+}
+
+export async function unblockDateRequest(date: string): Promise<void> {
+  await request<{ deleted: boolean; date: string }>(
+    `/api/availability/block/${encodeURIComponent(date)}`,
+    {
+      method: "DELETE",
+      auth: true,
+    }
+  );
+}
+
+export async function updateWorkHoursRequest(hours: WorkHourRow[]): Promise<WorkHourRow[]> {
+  const data = await request<{ hours: WorkHourRow[] }>("/api/availability/hours", {
+    method: "PUT",
+    body: { hours },
+    auth: true,
+  });
+  return data.hours;
 }
 
 export async function fetchShopsForBrowseRequest(): Promise<PublicShopListing[]> {
