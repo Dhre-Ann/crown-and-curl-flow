@@ -21,6 +21,8 @@ model Shop {
   subscriptionStatus   String        @default("trial") // trial, active, inactive
   subscriptionEndsAt   DateTime?
   createdAt            DateTime      @default(now())
+  /** How far ahead the admin dashboard "Upcoming bookings" window reaches (1–12 weeks). */
+  upcomingBookingWeeks Int           @default(1)
 
   owner        User?  @relation("ShopOwner", fields: [ownerId], references: [id])
   ownerId      String? @unique

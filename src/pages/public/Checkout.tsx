@@ -91,6 +91,12 @@ export default function Checkout() {
     };
   }, [styleId]);
 
+  useEffect(() => {
+    if (!confirmed || readOnlyPreview) return;
+    const t = window.setTimeout(() => navigate("/customer/dashboard"), 4500);
+    return () => window.clearTimeout(t);
+  }, [confirmed, readOnlyPreview, navigate]);
+
   const depositEstimate = Math.round(total * 0.3 * 100) / 100;
   const allChecked = policies.late && policies.cancel && policies.noshow;
 
@@ -181,12 +187,13 @@ export default function Checkout() {
               <span>${bal.toFixed(2)}</span>
             </div>
           </div>
+          <p className="text-xs text-muted-foreground mt-6">Redirecting to your dashboard in a few seconds…</p>
           <button
             type="button"
-            className="mt-8 text-accent text-sm underline"
-            onClick={() => navigate(customerFlowTo(withShopSearch("/services")))}
+            className="mt-4 btn-gold w-full max-w-xs mx-auto block text-center"
+            onClick={() => navigate("/customer/dashboard")}
           >
-            Back to services
+            Go to my dashboard
           </button>
         </div>
       </div>

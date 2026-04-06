@@ -231,6 +231,7 @@ export interface ApiShop {
   createdAt: string;
   description?: string | null;
   serviceCategory?: string | null;
+  upcomingBookingWeeks?: number;
 }
 
 export interface MyAppointment {
@@ -317,6 +318,12 @@ type RequestOptions = {
   method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   body?: unknown;
   auth?: boolean;
+  /**
+   * When false, do not send `x-shop-slug` or `?shopSlug=` — required for login/register on pages where
+   * VITE_SHOP_SLUG, session storage, or a stale URL would point at a missing shop and make shopResolver 404
+   * before auth runs.
+   */
+  includeShopContext?: boolean;
 };
 
 export function getToken() {
@@ -332,14 +339,16 @@ export function clearToken() {
   localStorage.removeItem(SESSION_SHOP_SLUG_KEY);
 }
 
-function buildHeaders(auth: boolean) {
+function buildHeaders(auth: boolean, includeShopContext = true) {
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
   };
 
-  const slug = getShopSlug();
-  if (slug) {
-    headers["x-shop-slug"] = slug;
+  if (includeShopContext) {
+    const slug = getShopSlug();
+    if (slug) {
+      headers["x-shop-slug"] = slug;
+    }
   }
 
   if (auth) {
@@ -369,15 +378,21 @@ function appendShopSlugQuery(path: string): string {
 }
 
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  const pathWithShop = appendShopSlugQuery(path);
+  const includeShop = options.includeShopContext !== false;
+  const pathWithShop = includeShop ? appendShopSlugQuery(path) : path;
   const response = await fetch(`${API_BASE_URL}${pathWithShop}`, {
     method: options.method ?? "GET",
-    headers: buildHeaders(options.auth ?? false),
+    headers: buildHeaders(options.auth ?? false, includeShop),
     body: options.body ? JSON.stringify(options.body) : undefined,
     credentials: "include",
   });
 
-  const payload = (await response.json()) as ApiResponse<T>;
+  let payload: ApiResponse<T>;
+  try {
+    payload = (await response.json()) as ApiResponse<T>;
+  } catch {
+    throw new Error(response.ok ? "Invalid response from server" : "Request failed");
+  }
   if (!response.ok || !payload.success) {
     if (payload.success === false) {
       throw new Error(payload.error);
@@ -392,6 +407,7 @@ export async function loginRequest(payload: { email: string; password: string })
   return request<{ token: string; user: ApiUser; shop: ApiShop | null }>("/api/auth/login", {
     method: "POST",
     body: payload,
+    includeShopContext: false,
   });
 }
 
@@ -399,6 +415,7 @@ export async function registerCustomerRequest(payload: { name: string; email: st
   return request<{ token: string; user: ApiUser }>("/api/auth/register", {
     method: "POST",
     body: payload,
+    includeShopContext: false,
   });
 }
 
@@ -412,18 +429,21 @@ export async function registerShopRequest(payload: {
   return request<{ token: string; user: ApiUser; shop: ApiShop }>("/api/auth/shop-register", {
     method: "POST",
     body: payload,
+    includeShopContext: false,
   });
 }
 
 export async function meRequest() {
   return request<{ user: ApiUser; shop: ApiShop | null }>("/api/auth/me", {
     auth: true,
+    includeShopContext: false,
   });
 }
 
 export async function logoutRequest(): Promise<void> {
   await request<{ loggedOut: boolean }>("/api/auth/logout", {
     method: "POST",
+    includeShopContext: false,
   });
 }
 
@@ -525,6 +545,20 @@ export async function updateWorkHoursRequest(hours: WorkHourRow[]): Promise<Work
 export async function fetchShopsForBrowseRequest(): Promise<PublicShopListing[]> {
   const data = await request<{ shops: PublicShopListing[] }>("/api/shops");
   return data.shops;
+}
+
+export async function fetchShopBookingPreferencesRequest(): Promise<{ upcomingBookingWeeks: number }> {
+  return request("/api/shops/me/booking-preferences", { auth: true });
+}
+
+export async function updateShopBookingPreferencesRequest(
+  upcomingBookingWeeks: number
+): Promise<{ upcomingBookingWeeks: number }> {
+  return request("/api/shops/me/booking-preferences", {
+    method: "PATCH",
+    body: { upcomingBookingWeeks },
+    auth: true,
+  });
 }
 
 export async function fetchStylesCatalog(opts?: { auth?: boolean }): Promise<CatalogStyle[]> {

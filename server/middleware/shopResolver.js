@@ -90,6 +90,12 @@ async function shopResolver(req, res, next) {
   });
 
   if (!shop) {
+    // Auth routes must still run: stale VITE_SHOP_SLUG, session slug, or bookmarked ?shopSlug= must not block login/me.
+    const pathOnly = String(req.originalUrl || req.url || "").split("?")[0];
+    if (pathOnly.startsWith("/api/auth")) {
+      req.shop = null;
+      return next();
+    }
     return res.status(404).json({ success: false, error: "Shop not found" });
   }
 
